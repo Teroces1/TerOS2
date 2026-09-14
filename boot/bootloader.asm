@@ -61,6 +61,7 @@ disk_error:
 
 Stage2_Start:
     mov byte [BootDrive], dl
+    mov byte [UsingLBA], al
     push ax
 
     xor ax, ax
@@ -125,19 +126,21 @@ Stage2_Start:
     jne .mode_part2
 
     ; save the frame buffer
-    mov ax, es:di+40
+    mov ax, [es:di+40]
     mov [FrameBuffer], ax
-    mov ax, es:di+42
+    mov ax, [es:di+42]
     mov [FrameBuffer+2], ax
-    mov ax, es:di+44
-    mov [FrameBuffer+4], ax
-    mov ax, es:di+46
-    mov [FrameBuffer+6], ax
+    
+    ; save the bytes per scan line
+    mov ax, [es:di+16]
+    mov [BytesPerScanLine], ax
+
     
 
     mov ax, 0x4F02          ; VBE function: Set VBE Mode
     or bx, 0xC000          ; add the flags to use linear frame buffer (0x4000), and to not clear screen (0x8000)
 
+    mov [ModeSelected], bx
     int 0x10
 
     cmp ax, 0x004F
@@ -239,11 +242,15 @@ Struct_DiskAddressPacket:
 ; ---------------------------
 ; Variables
 ; ---------------------------
+align 16
+VariablesPacket:
 BootDrive:      db 0
 Retries:        db 0
 NumModes:       db 0
-ModeSelected:   db 0xFF
-FrameBuffer: dq 0x0000
+UsingLBA:       db 0
+ModeSelected:   dw 0xFFFF
+FrameBuffer: dd 0x00000000
+BytesPerScanLine: dw 0x0000
 
 align 16
 VBEInfoBlock: times 512 db 0
@@ -445,9 +452,7 @@ ProtectedModeStart:
     mov esp, 0x00900000  ; pick a safe stack (example)
 
 
-
-    movzx eax, word [NumModes]
-    push eax
+    push VariablesPacket
     push VBEInfoBlock
     jmp 0x08:KERNEL_START
 
