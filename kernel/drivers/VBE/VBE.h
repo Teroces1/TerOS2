@@ -14,14 +14,15 @@ extern unsigned int VBE_bytesPerScanline;
 #define VBEC_YELLOW 0x00FFFF00
 #define VBEC_CYAN 0x0000FFFF
 #define VBEC_PURPLE 0x00FF00FF
+#define VBEC_CLEAR 0xFF000000
 
 void VBE_Swap();
 
 void VBE_ClearScreen(unsigned int color);
 
-inline unsigned int VBE_RGB(unsigned int r, unsigned int g, unsigned int b);
+inline unsigned int VBE_FROM_RGB(unsigned int r, unsigned int g, unsigned int b);
 
-unsigned int VBE_HueToRGBPureInt(unsigned int hue);
+unsigned int VBE_FROM_HUE(unsigned int hue);
 
 void VBE_SetPixel(int x, int y, unsigned int color);
 
