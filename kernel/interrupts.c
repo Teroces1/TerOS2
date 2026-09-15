@@ -1,5 +1,39 @@
 #include <stdint.h>
 #include "ports.h"
+#include "drivers/Keyboard/keyboard.h"
+#include "interrupts.h"
+
+#define DEFINE_ISR(name, c_handler) \
+__attribute__((naked)) void name(void) { \
+    __asm__ __volatile__ ( \
+        "push %%rax\n\t" \
+        "push %%rcx\n\t" \
+        "push %%rdx\n\t" \
+        "push %%rsi\n\t" \
+        "push %%rdi\n\t" \
+        "push %%r8\n\t"  \
+        "push %%r9\n\t"  \
+        "push %%r10\n\t" \
+        "push %%r11\n\t" \
+        "call " #c_handler "\n\t" \
+        "mov $0x20, %%al\n\t" \
+        "out %%al, $0x20\n\t" \
+        "pop %%r11\n\t" \
+        "pop %%r10\n\t" \
+        "pop %%r9\n\t"  \
+        "pop %%r8\n\t"  \
+        "pop %%rdi\n\t" \
+        "pop %%rsi\n\t" \
+        "pop %%rdx\n\t" \
+        "pop %%rcx\n\t" \
+        "pop %%rax\n\t" \
+        "iretq" \
+        : : : "memory" \
+    ); \
+}
+
+
+
 
 // Attribute flags for a 64-bit Interrupt Gate: 
 // 0x8E = Present (1), Ring 0 (00), Lower bits mandatory (01110) -> 10001110
@@ -65,4 +99,22 @@ void pic_remap(void) {
     // Keyboard is bit 1. (0xFD = 11111101 binary)
     outb(PIC1_DATA, 0xFD); 
     outb(PIC2_DATA, 0xFF); // Disable all on Slave PIC
+}
+
+DEFINE_ISR(keyboard_isr_wrapper, keyboard_isr);
+
+void init_interrupts(void) {
+    // 1. Hook the Assembly stub up to vector 0x21 (Keyboard)
+    idt_set_descriptor(0x21, keyboard_isr, IDT_TA_INTERRUPT_GATE);
+
+    // 2. Remap the PIC pathways
+    pic_remap();
+
+    // 3. Point the CPU to your new table
+    idtr.limit = (sizeof(idt_entry_t) * 256) - 1;
+    idtr.base  = (uint64_t)&idt;
+    __asm__ volatile("lidt %0" : : "m"(idtr)); // Load IDT assembly command
+
+    // 4. Finally turn on the CPU interrupt execution line!
+    __asm__ volatile("sti"); 
 }

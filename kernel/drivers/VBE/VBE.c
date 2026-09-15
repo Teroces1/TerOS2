@@ -2,8 +2,8 @@
 #define SCREEN_HEIGHT 768
 #define SCREEN_BPP    32
 #define BYTES_PER_PIXEL 4
-#define MAX_CHARS = SCREEN_WIDTH/8
-#define Max_ROWS = SCREEN_HEIGHT/16
+#define MAX_CHARS SCREEN_WIDTH/8
+#define MAX_ROWS SCREEN_HEIGHT/16
 #include "VBE.h"
 #include <stdint.h>
 #include "characters.h"
@@ -23,7 +23,7 @@ unsigned int cursorBack = VBEC_BLACK;
 volatile uint32_t* volatile VBE_backframebuffer = (volatile uint32_t* volatile) 0x200000;   // mapped to page #2
 
 void fast_flush(volatile uint32_t* dest, volatile uint32_t* src, int pixels) {
-    for (int i = 0; i < pixels-5000; i++) {
+    for (int i = 0; i < pixels; i++) {
         dest[i] = src[i];
     }
 }
@@ -86,6 +86,9 @@ void VBE_DrawRectangle(int x, int y, int width, int height, unsigned int color) 
 }
 
 void VBE_PutCharacter(char c, int x, int y, unsigned int color, unsigned int backColor) {
+    if (x < 0 || x > SCREEN_WIDTH-8) return;
+    if (y < 0 || y > SCREEN_HEIGHT-16) return;
+
     uint8_t *map = FONT[fontID][(int) c];
 
     for (int row = 0; row < 16; row++) {
@@ -108,9 +111,59 @@ void VBE_PutString(const char *str, int x, int y, unsigned int color, unsigned i
     }
 }
 
+void VBE_PutTerminalString(const char *str, int x, int y, int maxLength, unsigned int color, unsigned int backColor) {
+    int i = 0;
+    unsigned int currentColor = color;
+    while (str[i] != '\0' && i < maxLength) {
+        if (str[i] == (char) 5) {
+            i++;
+            switch(i) {
+                case 'w':
+                    currentColor = VBEC_WHITE;
+                    break;
+                case 'r':
+                    currentColor = VBEC_RED;
+                    break;
+                case 'g':
+                    currentColor = VBEC_GREEN;
+                    break;
+                case 'b':
+                    currentColor = VBEC_BLUE;
+                    break;
+                case 'm':
+                    currentColor = VBEC_PURPLE;
+                    break;
+                case 'c':
+                    currentColor = VBEC_CYAN;
+                    break;
+                case 'y':
+                    currentColor = VBEC_YELLOW;
+                    break;
+                case 'd':
+                    currentColor = VBEC_BLACK;
+                    break;
+                case '\0':
+                    i--;    // will auto end next iteration
+                    break;
+            }
+            i++;
+            continue;
+        }
+        VBE_PutCharacter(str[i], x + 8*i, y, color, backColor);
+        i++;
+    }
+}
+
 void VBE_AdvanceCursor() {
     cursorX++;
-    // if (cursorX > MAX_CHARS);
+    if (cursorX >= MAX_CHARS) {
+        if (cursorY +1 >= MAX_ROWS) {
+            cursorX--;
+        } else {
+            cursorX = 0;
+            cursorY ++;
+        }
+    }
 }
 
 void VBE_PrintChar(char c) {
