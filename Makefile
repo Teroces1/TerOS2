@@ -4,7 +4,8 @@
 
 # --- Toolchain Configuration ---
 # Swap to x86_64-elf- when moving to 64-bit Long Mode
-TOOLCHAIN_PREFIX = i686-linux-gnu-#i686-elf-
+# 32 bit mode: i686-linux-gnu-
+TOOLCHAIN_PREFIX = x86_64-linux-gnu-
 CC      = $(TOOLCHAIN_PREFIX)gcc
 LD      = $(TOOLCHAIN_PREFIX)ld
 OBJCOPY = $(TOOLCHAIN_PREFIX)objcopy
@@ -12,9 +13,9 @@ AS      = nasm
 
 # --- Compiler / Linker Flags ---
 # Swap -m32 to -m64 for Long Mode (and add -mno-red-zone -mgeneral-regs-only)
-CFLAGS  = -ffreestanding -m32 -Os -Wall -Wextra -MMD -MP  -fno-pic -fno-pie -fno-plt -fno-stack-protector
+CFLAGS  = -ffreestanding -m64 -O3 -Wall -Wextra -MMD -MP  -fno-pic -fno-pie -fno-plt -fno-stack-protector -mno-red-zone -mgeneral-regs-only
 # Swap elf_i386 to elf_x86_64 for Long Mode
-LDFLAGS = -T linker.ld -m elf_i386
+LDFLAGS = -T linker.ld -m elf_x86_64
 
 # --- Directories ---
 BUILD_DIR = build
@@ -67,7 +68,7 @@ IMAGE = $(BUILD_DIR)/os.img
 
 # Emulator Configuration
 QEMU = qemu-system-x86_64
-QEMU_FLAGS = -drive format=raw,file=$(IMAGE) -m 128M -d guest_errors -no-reboot -no-shutdown
+QEMU_FLAGS = -drive format=raw,file=$(IMAGE) -m 128M -d guest_errors -no-reboot -no-shutdown -enable-kvm
 
 # ==============================================================================
 # Build Rules
@@ -86,7 +87,7 @@ $(BUILD_DIR)/%.bin: $(BOOT_DIR)/%.asm
 # 2. Kernel Assembly (ELF32 -> change to elf64 for long mode)
 $(BUILD_DIR)/%.o: %.asm
 	@mkdir -p $(dir $@)
-	$(AS) -f elf32 $< -o $@
+	$(AS) -f elf64 $< -o $@
 
 # 3. Kernel C Compilation
 $(BUILD_DIR)/%.o: %.c

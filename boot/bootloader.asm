@@ -4,8 +4,11 @@
 
 %define NUM_SECTORS 30
 %define KERNEL_SECTOR 5
-%define KERNEL_START_SEGMENT 0x2000
-%define KERNEL_START 0x20000
+%define KERNEL_START_SEGMENT 0x3000
+%define KERNEL_START 0x30000
+%define PML4_ADDR 0x20000
+%define PDPT_ADDR 0x21000
+%define PD_ADDR 0x22000
 
 [BITS 16]         ; We’re in 16-bit Real Mode
 
@@ -375,7 +378,7 @@ _ReadTryCHS_loop:
     ; read kernel
 
     mov dl, [BootDrive]
-    mov ah, 0x03         ; read sectors (CHS)
+    mov ah, 0x02         ; read sectors (CHS)
     mov al, NUM_SECTORS  ; number of sectors
     xor ch, ch           ; cylinder 0
     mov cl, KERNEL_SECTOR+1 ; sector 2
@@ -443,17 +446,124 @@ ReadOK:
 
 [BITS 32]
 ProtectedModeStart:
+    cli
+    cld
     mov ax, 0x10         ; data selector
     mov ds, ax
     mov es, ax
     mov fs, ax
     mov gs, ax
     mov ss, ax
-    mov esp, 0x00900000  ; pick a safe stack (example)
+    mov esp, 0x00800000    ; pick a safe stack (example)
+
+; =====================================================================
+; STEP 1: Clear the page tables (12 KB total space)
+; =====================================================================
+    mov edi, PML4_ADDR     ; Clear starting from our hardcoded address
+    xor eax, eax
+    mov ecx, 3072          ; 1024 dwords * 3 tables = 3072
+    rep stosd
+
+; =====================================================================
+; STEP 2: Link the page tables together
+; =====================================================================
+    mov eax, PDPT_ADDR
+    or eax, 0x03
+    mov [PML4_ADDR], eax   ; Set first entry of PML4 to point to PDPT
+
+    mov eax, PD_ADDR
+    or eax, 0x03
+    mov [PDPT_ADDR], eax   ; Set first entry of PDPT to point to PD
+
+; =====================================================================
+; STEP 3: Identity Map the first 2MB using a Huge Page
+; Flag 0x83 = Present (0x01) + Read/Write (0x02) + Huge Page (0x80)
+; =====================================================================
+    ; Map PD entry 0 straight to physical address 0x00000000
+    ;Set Present (0x1), Writable (0x2), and PS (Page Size = 2MB) (0x80)
+    
+    ; kernel page
+    mov eax, 0x00000083    ; Starting physical memory block (Address 0)
+    mov [PD_ADDR], eax    ; Save into the first entry of the Page Directory
 
 
-    push VariablesPacket
-    push VBEInfoBlock
-    jmp 0x08:KERNEL_START
+    ; vbe backframe 1
+    mov eax, 0x00200083
+    mov [PD_ADDR+8], eax
+
+    ; vbe backframe 2
+    mov eax, 0x00400083
+    mov [PD_ADDR+16], eax
+
+    ; stackFrame
+    mov eax, 0x00600083
+    mov [PD_ADDR+24], eax
+
+    ; vbe frontframe 1
+    mov eax, [FrameBuffer]
+    or eax, 0x83
+    mov [PD_ADDR+32], eax
+
+    ; vbe frontframe 2
+    mov eax, [FrameBuffer]
+    add eax, 0x200000
+    or eax, 0x83
+    mov [PD_ADDR+40], eax
+    
+; =====================================================================
+; STEP 4: Tell the CPU where the top-level PML4 table is
+; =====================================================================
+    mov eax, PML4_ADDR
+    mov cr3, eax           ; CR3 register must hold physical address of PML4 [1]
+    
+; =====================================================================
+; STEP 5: Enable PAE (Physical Address Extension)
+; This is mandatory for 64-bit long mode paging!
+; =====================================================================
+    mov eax, cr4
+    or eax, 1 << 5         ; Set bit 5 (PAE bit) [1]
+    mov cr4, eax
+    
+; =====================================================================
+; STEP 6: Enable Long Mode in the EFER MSR
+; =====================================================================
+    mov ecx, 0xC0000080    ; EFER MSR (Extended Feature Enable Register) address [1]
+    rdmsr                  ; Read current MSR values into EAX
+    or eax, 1 << 8         ; Set bit 8 (Long Mode Enable / LME bit) [1]
+    wrmsr                  ; Write modified values back to EFER
+    
+; =====================================================================
+; STEP 7: Turn on Paging!
+; =====================================================================
+    mov eax, cr0
+    or eax, 1 << 31         ; Set bit 31 (Paging Enable / PG bit) [1]
+    mov cr0, eax           ; At this exact instruction, paging is active!
+    
+; =====================================================================
+; STEP 8: The Long Jump to 64-bit Code
+; =====================================================================
+    ; Assuming your GDT's 64-bit Code Segment selector is 0x08
+    jmp 0x18:init_long_mode
+
+[BITS 64]
+init_long_mode:
+    ; Welcome to 64-bit Long Mode!
+    ; Update remaining data registers to your 64-bit Data Segment selector
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+    mov ss, ax
+
+    mov rsp, 0x00800000
+
+
+    mov rdi, VariablesPacket    ; first
+    mov rsi, VBEInfoBlock       ; second
+
+    jmp KERNEL_START
+
+
 
 times 1536 - ($ - $$) db 0

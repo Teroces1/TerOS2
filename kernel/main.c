@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include "drivers/VBE/VBE.h"
 #include "drivers/VBE/VBEINFO.h"
+#include "../lib/string.h"
 
 #define VGA_WIDTH 80
 #define VGA_HEIGHT 25
@@ -30,11 +31,18 @@ typedef struct __attribute__((packed)) {
 
 
 
-void kernel_main(const VBEInfoBlock* vbe_info, const EntryPacket* entryPacket) {
-    VBE_framebuffer = entryPacket->FrameBuffer;
+void kernel_main(const EntryPacket* entryPacket, const VBEInfoBlock* vbe_info) {
+    VBE_framebuffer = 0x800000;//entryPacket->FrameBuffer;
     VBE_bytesPerScanline = entryPacket->BytesPerScanline;
-    VBE_ClearFrontScreen(VBEC_BLACK); // Black background
+    VBE_ClearFrontScreen(VBEC_GREEN); // Black background
     VBE_ClearScreen(VBEC_BLACK);
+
+    char digits[10];
+
+    STR_int2str(VBE_bytesPerScanline, digits, 10);
+
+    VBE_PutString("Hello from 64-bit land!", 600, 410, VBEC_WHITE);
+    VBE_PutString(digits, 600, 426, VBEC_WHITE);
 
     VBE_SetPixel(0,0, VBEC_WHITE);
     VBE_SetPixel(512,384, VBEC_GREEN);
@@ -42,10 +50,10 @@ void kernel_main(const VBEInfoBlock* vbe_info, const EntryPacket* entryPacket) {
 
     VBE_DrawRectangle(600, 400, 8, 8, VBEC_WHITE);
 
-    VBE_DrawRectangle(610, 400, 8, 8, VBEC_WHITE);
+    VBE_DrawRectangle(610, 400, 8, 8, VBEC_PURPLE);
     VBE_DrawRectangle(620, 400, 8, 8, VBEC_WHITE);
 
-    VBE_PutString("ABCDEFG", 600, 410, VBEC_WHITE);
+    // VBE_PutString("Hello from 64-bit land!", 600, 410, VBEC_WHITE);
 
     VBE_Swap();
 
@@ -73,18 +81,31 @@ void kernel_main(const VBEInfoBlock* vbe_info, const EntryPacket* entryPacket) {
     //     }
     // }
 
-    // int hue = 0;
-    // while (1) {
-    //     // hue = 0;
-    //     for (int y = 0; y < 786; y++) {
-    //         hue = (hue+1) % 256;
-    //         for (int x = 0; x < 1024; x++) {
-    //             VBE_SetPixel(x,y,VBE_HueToRGBPureInt(hue));
-    //         }
-    //     }
-    //     VBE_Swap();
-    //     // wait_vsync();
-    // }
+    int hue = 0;
+    int iters = 0;
+    while (1) {
+        // hue = 0;
+        for (int y = 0; y < 786; y++) {
+            hue = (hue + 1) % 256;
+            // Calculate the color for this specific row
+            uint32_t row_color = VBE_FROM_HUE(hue);
+            
+            // Calculate the starting index for this row (handling the VBE pitch/stride correctly)
+            // VBE_bytesPerScanline is usually 4096 bytes, which is 1024 uint32_t pixels.
+            int row_offset = y * (VBE_bytesPerScanline / 4);
+
+            for (int x = 0; x < 1024; x++) {
+                VBE_backframebuffer[row_offset + x] = row_color;
+            }
+        }
+        VBE_PutString("Frames: ", 0, 0, VBEC_BLACK, VBEC_WHITE);
+        STR_int2str(iters, digits, 10);
+        VBE_PutString(digits, 64, 0, VBEC_BLACK, VBEC_WHITE);
+        
+        VBE_Swap();
+        // wait_vsync();
+        iters++;
+    }
 
     while (1) {
         __asm__ volatile("hlt");

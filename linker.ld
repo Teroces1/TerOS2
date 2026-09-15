@@ -1,8 +1,8 @@
 ENTRY(start)
 
 SECTIONS {
-    /* Tell the compiler your kernel starts exactly at 0x20000 */
-    . = 0x20000;
+    /* Tell the compiler your kernel starts exactly at 0x30000 */
+    . = 0x30000;
 
     .text :
     {

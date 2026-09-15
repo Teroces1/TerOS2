@@ -2,23 +2,34 @@
 #define SCREEN_HEIGHT 768
 #define SCREEN_BPP    32
 #define BYTES_PER_PIXEL 4
+#define MAX_CHARS = SCREEN_WIDTH/8
+#define Max_ROWS = SCREEN_HEIGHT/16
 #include "VBE.h"
 #include <stdint.h>
 #include "characters.h"
+#include <stdbool.h>
 
 volatile uint32_t* volatile VBE_framebuffer;
 unsigned int VBE_bytesPerScanline;
 
-volatile uint32_t* volatile VBE_backframebuffer = (volatile uint32_t* volatile) 0x01000000;   // for now picking a random spot
+int fontID = 1;
+
+int cursorX = 0;
+int cursorY = 0;
+bool cursorVisible = 0;
+unsigned int cursorColor = VBEC_WHITE;
+unsigned int cursorBack = VBEC_BLACK;
+
+volatile uint32_t* volatile VBE_backframebuffer = (volatile uint32_t* volatile) 0x200000;   // mapped to page #2
 
 void fast_flush(volatile uint32_t* dest, volatile uint32_t* src, int pixels) {
-    for (int i = 0; i < pixels; i++) {
+    for (int i = 0; i < pixels-5000; i++) {
         dest[i] = src[i];
     }
 }
 
 void VBE_Swap() {
-    fast_flush(VBE_framebuffer, VBE_backframebuffer, VBE_bytesPerScanline * SCREEN_HEIGHT);
+    fast_flush(VBE_framebuffer, VBE_backframebuffer, VBE_bytesPerScanline * SCREEN_HEIGHT / BYTES_PER_PIXEL);
 }
 
 void VBE_ClearScreen(unsigned int color) {
@@ -75,14 +86,15 @@ void VBE_DrawRectangle(int x, int y, int width, int height, unsigned int color) 
 }
 
 void VBE_PutCharacter(char c, int x, int y, unsigned int color, unsigned int backColor) {
-    uint8_t *map = FONT[(int) c];
+    uint8_t *map = FONT[fontID][(int) c];
 
-    for (int row = 0; row < 8; row++) {
+    for (int row = 0; row < 16; row++) {
         for (int col = 0; col < 8; col++) {
-            if (map[col] & (0x80 >> row)) {
-                VBE_SetPixel(x + row, y + col, color);
+            // (map[row] & (0x80 >> col)) > 0
+            if ((map[row] & (0x80 >> col)) > 0) {
+                VBE_SetPixel(x + col, y + row, color);
             } else {
-                VBE_SetPixel(x + row, y + col, backColor);
+                VBE_SetPixel(x + col, y + row, backColor);
             }
         }
     }
@@ -91,10 +103,21 @@ void VBE_PutCharacter(char c, int x, int y, unsigned int color, unsigned int bac
 void VBE_PutString(const char *str, int x, int y, unsigned int color, unsigned int backColor) {
     int i = 0;
     while (str[i] != '\0') {
-        VBE_PutCharacter(str[i], x + 10*i, y, color, backColor);
+        VBE_PutCharacter(str[i], x + 8*i, y, color, backColor);
         i++;
     }
 }
+
+void VBE_AdvanceCursor() {
+    cursorX++;
+    // if (cursorX > MAX_CHARS);
+}
+
+void VBE_PrintChar(char c) {
+    VBE_PutCharacter(c, cursorX*8, cursorY*16, cursorColor, cursorBack);
+    VBE_AdvanceCursor();
+}
+
 
 
 

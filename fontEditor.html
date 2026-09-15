@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bitmap Font Creator</title>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --panel-bg: #1e1e1e;
+            --border-color: #333;
+            --accent-color: #00ffcc;
+            --accent-hover: #00ccaa;
+            --text-color: #e0e0e0;
+            --cell-off: #2a2a2a;
+            --cell-on: #00ffcc;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        header {
+            background-color: var(--panel-bg);
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        header h1 {
+            font-size: 1.2rem;
+            color: var(--accent-color);
+        }
+
+        .header-controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        input[type="number"], input[type="text"] {
+            background: #2a2a2a;
+            border: 1px solid var(--border-color);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            outline: none;
+        }
+
+        input[type="number"] { width: 60px; }
+        input[type="text"] { width: 40px; text-align: center; }
+
+        button {
+            background: var(--accent-color);
+            color: #000;
+            border: none;
+            padding: 6px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s, transform 0.1s;
+        }
+
+        button:hover { background: var(--accent-hover); }
+        button:active { transform: scale(0.95); }
+        button.secondary { background: #444; color: white; }
+        button.secondary:hover { background: #555; }
+
+        .main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 250px;
+            background: var(--panel-bg);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-header {
+            padding: 10px;
+            border-bottom: 1px solid var(--border-color);
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .char-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-content: flex-start;
+        }
+
+        .char-item {
+            width: 40px;
+            height: 40px;
+            background: #2a2a2a;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .char-item:hover {
+            border-color: var(--accent-color);
+            color: var(--accent-color);
+        }
+
+        .char-item.active {
+            background: var(--accent-color);
+            color: #000;
+            border-color: var(--accent-color);
+        }
+
+        /* Editor */
+        .editor-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            overflow: auto;
+        }
+
+        .grid-container {
+            display: grid;
+            gap: 1px;
+            background: var(--border-color);
+            border: 2px solid var(--border-color);
+            border-radius: 4px;
+            user-select: none;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        .cell {
+            width: 25px;
+            height: 25px;
+            background: var(--cell-off);
+            cursor: crosshair;
+            transition: background 0.1s, transform 0.05s;
+        }
+
+        .cell:hover { filter: brightness(1.2); }
+        .cell.active { background: var(--cell-on); box-shadow: 0 0 5px var(--cell-on); }
+
+        .editor-controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            background: var(--panel-bg);
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+        /* IO Panel */
+        .io-panel {
+            width: 350px;
+            background: var(--panel-bg);
+            border-left: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .io-section {
+            padding: 15px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .io-section:last-child { border-bottom: none; flex: 1; }
+
+        textarea {
+            width: 100%;
+            height: 200px;
+            background: #121212;
+            color: #a6e22e;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 10px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.85rem;
+            resize: none;
+            outline: none;
+            white-space: pre;
+            overflow: auto;
+        }
+
+        .test-canvas-container {
+            width: 100%;
+            height: 100px;
+            background: #121212;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            overflow: auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        canvas { image-rendering: pixelated; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Bitmap Font Creator</h1>
+        <div class="header-controls">
+            <label>Cols (W): <input type="number" id="gridWidth" value="8" min="1" max="32"></label>
+            <label>Rows (H): <input type="number" id="gridHeight" value="8" min="1" max="32"></label>
+            <button onclick="applyGridSize()" class="secondary">Apply Size</button>
+            <button onclick="clearGrid()" class="secondary">Clear Grid</button>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <div class="sidebar">
+            <div class="sidebar-header">Saved Characters</div>
+            <div class="char-list" id="charList">
+                <!-- Characters populated here -->
+            </div>
+        </div>
+
+        <div class="editor-area">
+            <div class="grid-container" id="grid"></div>
+            
+            <div class="editor-controls">
+                <label>Character: <input type="text" id="charInput" maxlength="1" value="A"></label>
+                <button onclick="saveCharacter()">Save Character</button>
+                <button onclick="deleteCharacter()" class="secondary">Delete</button>
+            </div>
+        </div>
+
+        <div class="io-panel">
+            <div class="io-section">
+                <h3>Export / Import</h3>
+                <textarea id="codeArea" placeholder="C Array code will appear here..."></textarea>
+                <div style="display: flex; gap: 10px;">
+                    <button onclick="exportFont()" style="flex: 1;">Export</button>
+                    <button onclick="importFont()" class="secondary" style="flex: 1;">Import</button>
+                </div>
+            </div>
+            
+            <div class="io-section">
+                <h3>Test Mode</h3>
+                <input type="text" id="testInput" placeholder="Type to test font..." style="width: 100%; text-align: left;" oninput="renderTest()">
+                <div class="test-canvas-container">
+                    <canvas id="testCanvas"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let width = 8;
+        let height = 8;
+        let currentGrid = [];
+        let fontData = {};
+        let isDrawing = false;
+        let drawValue = 1;
+
+        const gridEl = document.getElementById('grid');
+        const charListEl = document.getElementById('charList');
+        const charInput = document.getElementById('charInput');
+        const codeArea = document.getElementById('codeArea');
+        const testInput = document.getElementById('testInput');
+        const testCanvas = document.getElementById('testCanvas');
+        const ctx = testCanvas.getContext('2d');
+
+        function initGrid() {
+            gridEl.innerHTML = '';
+            gridEl.style.gridTemplateColumns = `repeat(${width}, 25px)`;
+            gridEl.style.gridTemplateRows = `repeat(${height}, 25px)`;
+            
+            currentGrid = Array(height).fill().map(() => Array(width).fill(0));
+
+            for (let r = 0; r < height; r++) {
+                for (let c = 0; c < width; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.dataset.r = r;
+                    cell.dataset.c = c;
+                    gridEl.appendChild(cell);
+                }
+            }
+        }
+
+        function applyGridSize() {
+            const newW = parseInt(document.getElementById('gridWidth').value);
+            const newH = parseInt(document.getElementById('gridHeight').value);
+            if (newW > 0 && newH > 0) {
+                width = newW;
+                height = newH;
+                initGrid();
+                renderTest();
+            }
+        }
+
+        function clearGrid() {
+            currentGrid = Array(height).fill().map(() => Array(width).fill(0));
+            updateGridUI();
+        }
+
+        function updateGridUI() {
+            const cells = gridEl.children;
+            for (let i = 0; i < cells.length; i++) {
+                const r = cells[i].dataset.r;
+                const c = cells[i].dataset.c;
+                if (currentGrid[r][c]) {
+                    cells[i].classList.add('active');
+                } else {
+                    cells[i].classList.remove('active');
+                }
+            }
+        }
+
+        // Drawing Mechanics
+        gridEl.addEventListener('mousedown', (e) => {
+            if (e.target.classList.contains('cell')) {
+                isDrawing = true;
+                const r = e.target.dataset.r;
+                const c = e.target.dataset.c;
+                drawValue = currentGrid[r][c] ? 0 : 1;
+                toggleCell(r, c, drawValue);
+            }
+        });
+
+        window.addEventListener('mouseup', () => isDrawing = false);
+
+        gridEl.addEventListener('mouseover', (e) => {
+            if (isDrawing && e.target.classList.contains('cell')) {
+                const r = e.target.dataset.r;
+                const c = e.target.dataset.c;
+                toggleCell(r, c, drawValue);
+            }
+        });
+
+        function toggleCell(r, c, val) {
+            currentGrid[r][c] = val;
+            const index = r * width + parseInt(c);
+            if (val) gridEl.children[index].classList.add('active');
+            else gridEl.children[index].classList.remove('active');
+        }
+
+        // Character Management
+        function saveCharacter() {
+            let char = charInput.value;
+            if (!char) return;
+            
+            // Deep copy current grid
+            fontData[char] = currentGrid.map(row => [...row]);
+            updateCharList();
+            renderTest();
+        }
+
+        function deleteCharacter() {
+            let char = charInput.value;
+            if (fontData[char]) {
+                delete fontData[char];
+                updateCharList();
+                clearGrid();
+                renderTest();
+            }
+        }
+
+        function loadCharacter(char) {
+            charInput.value = char;
+            if (fontData[char]) {
+                currentGrid = fontData[char].map(row => [...row]);
+                updateGridUI();
+            }
+            updateCharList();
+        }
+
+        function updateCharList() {
+            charListEl.innerHTML = '';
+            const chars = Object.keys(fontData).sort();
+            chars.forEach(char => {
+                const div = document.createElement('div');
+                div.className = 'char-item';
+                if (char === charInput.value) div.classList.add('active');
+                div.innerText = char === ' ' ? '␣' : char;
+                div.onclick = () => loadCharacter(char);
+                charListEl.appendChild(div);
+            });
+        }
+
+        // Export / Import
+        function exportFont() {
+            let type = width <= 8 ? 'uint8_t' : width <= 16 ? 'uint16_t' : 'uint32_t';
+            let code = `${type} FONT[128][${height}] = {\n`;
+            
+            let keys = Object.keys(fontData).map(k => k.charCodeAt(0)).sort((a,b) => a - b);
+            
+            for (let codePoint of keys) {
+                if (codePoint >= 128) continue; // ASCII only
+                
+                let char = String.fromCharCode(codePoint);
+                let grid = fontData[char];
+                
+                let hexArray = grid.map(row => {
+                    let val = 0;
+                    for (let c = 0; c < width; c++) {
+                        // Fill least significant bits first
+                        if (row[c]) val |= (1 << (width - 1 - c));
+                    }
+                    let hexStr = val.toString(16).toUpperCase();
+                    let pad = type === 'uint8_t' ? 2 : type === 'uint16_t' ? 4 : 8;
+                    return '0x' + hexStr.padStart(pad, '0');
+                });
+                
+                let charLabel = char === "'" ? "'\\''" : char === "\\" ? "'\\\\'" : `'${char}'`;
+                code += `    [${charLabel}] = { ${hexArray.join(', ')} },\n`;
+            }
+            code += `};\n`;
+            codeArea.value = code;
+        }
+
+        function importFont() {
+            let code = codeArea.value;
+            if (!code.trim()) return alert("Paste C array code to import.");
+
+            // Regex to find ['X'] = { 0x..., 0x... }
+            let regex = /\[\s*'(\\?'|\\\\|.)'\s*\]\s*=\s*\{\s*([^}]+)\s*\}/g;
+            let match;
+            let newFontData = {};
+            let newHeight = height;
+
+            while ((match = regex.exec(code)) !== null) {
+                let charStr = match[1];
+                let char = charStr;
+                if (charStr === "\\'") char = "'";
+                if (charStr === "\\\\") char = "\\";
+
+                let hexes = match[2].split(',').map(s => s.trim()).filter(s => s !== '');
+                if (hexes.length > 0) newHeight = hexes.length;
+
+                let grid = hexes.map(hexStr => {
+                    let val = parseInt(hexStr, 16);
+                    let row = [];
+                    for (let c = 0; c < width; c++) {
+                        row.push((val & (1 << (width - 1 - c))) ? 1 : 0);
+                    }
+                    return row;
+                });
+                newFontData[char] = grid;
+            }
+
+            if (Object.keys(newFontData).length > 0) {
+                fontData = newFontData;
+                height = newHeight;
+                document.getElementById('gridHeight').value = height;
+                initGrid();
+                updateCharList();
+                if (fontData[charInput.value]) {
+                    loadCharacter(charInput.value);
+                } else {
+                    clearGrid();
+                }
+                renderTest();
+                alert("Font imported successfully!");
+            } else {
+                alert("Could not parse font data. Ensure format matches export format.");
+            }
+        }
+
+        // Test Mode
+        function renderTest() {
+            let text = testInput.value;
+            let scale = 3; // Pixel scale for canvas
+            
+            testCanvas.width = Math.max(text.length * (width + 1) * scale, 10);
+            testCanvas.height = height * scale;
+            
+            ctx.clearRect(0, 0, testCanvas.width, testCanvas.height);
+            ctx.fillStyle = '#00ffcc';
+
+            for (let i = 0; i < text.length; i++) {
+                let char = text[i];
+                let grid = fontData[char];
+                if (grid) {
+                    for (let r = 0; r < height; r++) {
+                        for (let c = 0; c < width; c++) {
+                            if (grid[r][c]) {
+                                ctx.fillRect((i * (width + 1) + c) * scale, r * scale, scale, scale);
+                            }
+                        }
+                    }
+                } else {
+                    // Draw placeholder box for missing characters
+                    ctx.strokeStyle = '#444';
+                    ctx.strokeRect((i * (width + 1)) * scale, 0, width * scale, height * scale);
+                }
+            }
+        }
+
+        // Initialize
+        initGrid();
+        
+        // Setup a default 'A' for demonstration
+        fontData['A'] = [
+            [0,0,1,1,1,1,0,0],
+            [0,1,1,0,0,1,1,0],
+            [0,1,0,0,0,0,1,0],
+            [0,1,0,0,0,0,1,0],
+            [1,1,1,1,1,1,1,1],
+            [1,0,0,0,0,0,0,1],
+            [1,0,0,0,0,0,0,1],
+            [1,0,0,0,0,0,0,1]
+        ];
+        loadCharacter('A');
+        
+    </script>
+</body>
+</html>

@@ -5,6 +5,7 @@
 
 extern volatile unsigned int* volatile VBE_framebuffer;
 extern unsigned int VBE_bytesPerScanline;
+extern volatile uint32_t* volatile VBE_backframebuffer;
 
 #define VBEC_RED 0x00FF0000
 #define VBEC_BLUE 0x000000FF
