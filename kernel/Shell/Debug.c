@@ -153,24 +153,116 @@ void DEBUG_print_VBE() {
     char digits[17];
     SHELL_Print("\5gVBE Information:");
 
+    // 1. Signature
     SHELL_Print("\n  \5ySignature: \5d");
     SHELL_putChar(DEBUG_VBEINFO->signature[0]);
     SHELL_putChar(DEBUG_VBEINFO->signature[1]);
     SHELL_putChar(DEBUG_VBEINFO->signature[2]);
     SHELL_putChar(DEBUG_VBEINFO->signature[3]);
 
+    // 2. Version
     SHELL_Print("\n  \5yVersion: \5d0x");
     STR_int2str(DEBUG_VBEINFO->version, digits, 16);
     SHELL_Print(digits);
 
+    // Helper macro to convert real-mode segment:offset (Far Pointer) to a linear memory address
+    #define FAR_PTR_TO_LINEAR(fp) (void *)(((fp >> 16) << 4) + (fp & 0xFFFF))
+
+    // 3. OEM Name String
     SHELL_Print("\n  \5yOEM Name: \5d");
-    SHELL_Print((char *)((DEBUG_VBEINFO->oem_string_ptr >> 12) + (DEBUG_VBEINFO->oem_string_ptr & 0xFFFF)));
+    if (DEBUG_VBEINFO->oem_string_ptr) {
+        SHELL_Print((char *)FAR_PTR_TO_LINEAR(DEBUG_VBEINFO->oem_string_ptr));
+    } else {
+        SHELL_Print("None");
+    }
+
+    // 4. Capabilities
+    SHELL_Print("\n  \5yCapabilities: \5d0x");
+    STR_int2str(DEBUG_VBEINFO->capabilities, digits, 16);
+    SHELL_Print(digits);
+
+    // 5. Video Mode Pointer (Prints raw segment:offset hex value)
+    SHELL_Print("\n  \5yVideo Mode Ptr: \5d0x");
+    STR_int2str(DEBUG_VBEINFO->video_mode_ptr, digits, 16);
+    SHELL_Print(digits);
+
+    // 6. Total Memory
+    SHELL_Print("\n  \5yTotal Memory: \5d");
+    STR_int2str(DEBUG_VBEINFO->total_memory * 64, digits, 10); // Convert 64KB blocks to KB
+    SHELL_Print(digits);
+    SHELL_Print(" KB");
+
+    // 7. OEM Software Revision
+    SHELL_Print("\n  \5yOEM Software Rev: \5d0x");
+    STR_int2str(DEBUG_VBEINFO->oem_software_rev, digits, 16);
+    SHELL_Print(digits);
+
+    // 8. OEM Vendor Name
+    SHELL_Print("\n  \5yVendor Name: \5d");
+    if (DEBUG_VBEINFO->oem_vendor_name_ptr) {
+        SHELL_Print((char *)FAR_PTR_TO_LINEAR(DEBUG_VBEINFO->oem_vendor_name_ptr));
+    } else {
+        SHELL_Print("None");
+    }
+
+    // 9. OEM Product Name
+    SHELL_Print("\n  \5yProduct Name: \5d");
+    if (DEBUG_VBEINFO->oem_product_name_ptr) {
+        SHELL_Print((char *)FAR_PTR_TO_LINEAR(DEBUG_VBEINFO->oem_product_name_ptr));
+    } else {
+        SHELL_Print("None");
+    }
+
+    // 10. OEM Product Revision
+    SHELL_Print("\n  \5yProduct Rev: \5d");
+    if (DEBUG_VBEINFO->oem_product_rev_ptr) {
+        SHELL_Print((char *)FAR_PTR_TO_LINEAR(DEBUG_VBEINFO->oem_product_rev_ptr));
+    } else {
+        SHELL_Print("None");
+    }
+
+    #undef FAR_PTR_TO_LINEAR
 
     SHELL_putChar('\n');
 }
 
 void DEBUG_print_modes(void) {
+    char digits[17];
+    char paddingBuffer[17];
 
+    SHELL_Print("\5gVBE Modes Available (");
+    SHELL_Print(STR_int2str(DEBUG_ENTRYPACKET->TotalModes, digits, 10));
+    SHELL_Print("):\n");
+    for (int i = 0; i < DEBUG_ENTRYPACKET->TotalModes; i++) {
+        if (i == DEBUG_ENTRYPACKET->ModeIndexSelected) {
+            SHELL_Print("\5c-->\5y");
+        } else {
+            SHELL_Print("   \5y");
+
+        }
+        SHELL_Print(STR_rpad(STR_int2str(i, digits, 10), paddingBuffer, 3, ' '));
+        SHELL_Print(" : \5r");
+
+
+        char *res = STR_int2str(DEBUG_VBEMODEINFO[i].x_resolution, digits, 10);
+        int xreslen = STR_strlen(res);
+        SHELL_Print(res);
+        SHELL_Print("x");
+        res = STR_int2str(DEBUG_VBEMODEINFO[i].y_resolution, digits, 10);
+        int yreslen = STR_strlen(res);
+        SHELL_Print(res);
+
+        // add padding
+        for (int i = 0; i < (8-xreslen-yreslen); i++) {
+            SHELL_putChar(' ');
+        }
+
+        SHELL_Print(" \5m @ ");
+        SHELL_Print(STR_int2str(DEBUG_VBEMODEINFO[i].bits_per_pixel, digits, 10));
+        SHELL_Print("bbm\n");
+    }
+
+    SHELL_putChar('\n');
 }
 
 void DEBUG_print_mode_info(int modeIndex) {

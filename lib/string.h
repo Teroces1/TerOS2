@@ -33,4 +33,7 @@ char* STR_CEncode(char* str);
 
 int STR_str2int(const char *str);
 
+char* STR_lpad(const char *str, char *buffer, int width, char padding);
+char* STR_rpad(const char *str, char *buffer, int width, char padding);
+
 #endif

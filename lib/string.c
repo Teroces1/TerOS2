@@ -239,3 +239,42 @@ int STR_str2int(const char *str) {
 
     return num;
 }
+
+char* STR_lpad(const char *str, char *buffer, int width, char padding) {
+    int len = STR_strlen(str);
+    int lenpadding = 0;
+    if (len >= width)
+        lenpadding = 0;
+    else
+        lenpadding = width - len;
+
+    char *ptr = buffer;
+    
+    for (int i = 0; i < lenpadding; i ++)
+        *ptr++ = padding;
+
+    for (int i = 0; i < len; i++)
+        *ptr++ = str[i];
+
+    return buffer;    
+}
+
+char* STR_rpad(const char *str, char *buffer, int width, char padding) {
+    int len = STR_strlen(str);
+    int lenpadding = 0;
+    if (len >= width)
+        lenpadding = 0;
+    else
+        lenpadding = width - len;
+
+    char *ptr = buffer;
+    
+    for (int i = 0; i < len; i++)
+        *ptr++ = str[i];
+    
+    for (int i = 0; i < lenpadding; i ++)
+        *ptr++ = padding;
+
+
+    return buffer;    
+}
