@@ -18,6 +18,7 @@ char commandBuffer[MAX_COMMAND_LENGTH];    // make it big just in case
 int commandLength = 0;
 int commandCursor = 0;
 char terminal[TERMINAL_HEIGHT][WIDTH*2+1];  // larger width just in case the entire line is filled with color symbols
+bool snapToNewLine = false;
 volatile int top = 0;    // always points to the last entry to the terminal
 volatile int topScreenSize = 0; // the screen size of the current entry
 volatile int first = 0; // always points to the 1st entry visible on the screen
@@ -118,6 +119,14 @@ void SHELL_Render() {
 }
 
 void _nextLine() {
+    if (shellCursorY == top) {
+        top = (top+1) & TERMINAL_ROTATE_MASK;
+
+        // clear the line
+        for (int j = 0; j <= WIDTH *2; j++) {
+            terminal[top][j] = ' ';
+        }
+    }
     shellCursorY = (shellCursorY+1) & TERMINAL_ROTATE_MASK;
     shellCursorX = 0;
     topScreenSize = 0;
@@ -126,18 +135,18 @@ void _nextLine() {
 
     int cursorToFirstHeight = ((shellCursorY - first + TERMINAL_HEIGHT) & TERMINAL_ROTATE_MASK);
 
-    if (cursorToFirstHeight > currentOutputHeight) {
-        top = (top+1) & TERMINAL_ROTATE_MASK;
+    // if (cursorToFirstHeight > currentOutputHeight) {
+    //     top = (top+1) & TERMINAL_ROTATE_MASK;
 
-        // clear the line
-        for (int j = 0; j <= WIDTH *2; j++) {
-            terminal[top][j] = ' ';
-        }
-    }
+    //     // clear the line
+    //     for (int j = 0; j <= WIDTH *2; j++) {
+    //         terminal[top][j] = ' ';
+    //     }
+    // }
     
 
-    // if (((top >= first) && (HEIGHT - (top - first) < BOTTOM_PADDING)) || (HEIGHT - (TERMINAL_HEIGHT - (first - top) - 1) < BOTTOM_PADDING)) {
-    if (HEIGHT - cursorToFirstHeight < BOTTOM_PADDING) {
+    // // if (((top >= first) && (HEIGHT - (top - first) < BOTTOM_PADDING)) || (HEIGHT - (TERMINAL_HEIGHT - (first - top) - 1) < BOTTOM_PADDING)) {
+    if (snapToNewLine && HEIGHT - cursorToFirstHeight < BOTTOM_PADDING) {
         //first must shift down as well or else the top wouldnt be in frame + the padding
         first = (first + BOTTOM_PADDING - (HEIGHT - cursorToFirstHeight)) & TERMINAL_ROTATE_MASK;
     }
@@ -229,9 +238,11 @@ void SHELL_Print(char *str) {
 void SHELL_hidden_print(char *str) {
     int savedCursorX = shellCursorX;
     int savedCursorY = shellCursorY;
+    snapToNewLine = false;
 
     SHELL_Print(str);
 
+    snapToNewLine = true;
     shellCursorX = savedCursorX;
     shellCursorY = savedCursorY;
 }
@@ -267,6 +278,26 @@ void RunCommand() {
         SHELL_Print("world\n");
     } else if (STR_strcmp(commandBuffer, "bootinfo") == 0) {
         DEBUG_print_entry();
+    } else if (STR_strcmp(commandBuffer, "cli") == 0) {
+        clear();
+    } else if (STR_strcmp(commandBuffer, "help") == 0) {
+        SHELL_Print(STR_CEncode(
+            "  \\5yhello    \\5d- Returns 'world' for testing.\n"
+            "  \\5ybootinfo \\5d- Prints most of the information in the entry packet.\n"
+            "  \\5ycli      \\5d- Clears the screen.\n"
+            "  \\5yhelp     \\5d- Prints out a list of commands.\n"
+            "  \\5yvbe      \\5d- Prints out the VBE information.\n"
+            "  \\5yvbemode [mode index] \\5d- Prints out the information on a given VBE mode. If no mode given, prints out a list of vbe modes.\n"
+        ));
+    } else if (STR_strcmp(commandBuffer, "vbe") == 0) {
+        DEBUG_print_VBE();
+    } else if (STR_strncmp(commandBuffer, "vbemode", 7) == 0) {
+        if (commandBuffer[8] >= '0' && commandBuffer[8] <= '9') {
+            int arg = STR_str2int(commandBuffer+8);
+            DEBUG_print_mode_info(arg);
+        } else {
+            DEBUG_print_modes();
+        }        
     }
 
 

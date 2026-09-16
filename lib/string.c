@@ -226,3 +226,16 @@ char* STR_CEncode(char* str) {
 
     return str;
 }
+
+
+int STR_str2int(const char *str) {
+    int num = 0;
+    const char *i = str;
+    while (*i != '\0' && (*i >= '0' && *i <= '9')) {
+        num *= 10;
+        num += (*i - 48);
+        i++;
+    }
+
+    return num;
+}

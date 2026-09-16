@@ -31,7 +31,7 @@ void kernel_main(const EntryPacket* entryPacket, const VBEInfoBlock* vbe_info) {
     VBE_bytesPerScanline = entryPacket->BytesPerScanline;
     VBE_ClearFrontScreen(VBEC_BLACK); // Black background
 
-    DEBUG_init(entryPacket);
+    DEBUG_init(entryPacket, vbe_info);
     WINDOW_Init();
 
 

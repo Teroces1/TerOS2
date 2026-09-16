@@ -31,4 +31,6 @@ char* STR_64int2str(int64_t value, char *buffer, const int64_t base);
 
 char* STR_CEncode(char* str);
 
+int STR_str2int(const char *str);
+
 #endif

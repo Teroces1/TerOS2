@@ -4,7 +4,9 @@
 #include "Shell.h"
 #include "Debug.h"
 
-EntryPacket *DEBUG_ENTRYPACKET;
+volatile EntryPacket *DEBUG_ENTRYPACKET;
+volatile VBEInfoBlock *DEBUG_VBEINFO;
+const volatile VBEModeInfo *DEBUG_VBEMODEINFO = (volatile VBEModeInfo *)(0x10000);
 
 char *encodeStrings[] = {
     [0] = "\\5gBoot Statistics:",
@@ -19,8 +21,9 @@ char *encodeStrings[] = {
     NULL
 };
 
-void DEBUG_init(EntryPacket *entry) {
+void DEBUG_init(EntryPacket *entry, VBEInfoBlock *vbeinfo) {
     DEBUG_ENTRYPACKET = entry;
+    DEBUG_VBEINFO = vbeinfo;
 
     int i = 0;
     while (encodeStrings[i] != NULL) {
@@ -144,4 +147,32 @@ void DEBUG_print_entry() {
     }
 
     SHELL_putChar('\n');
+}
+
+void DEBUG_print_VBE() {
+    char digits[17];
+    SHELL_Print("\5gVBE Information:");
+
+    SHELL_Print("\n  \5ySignature: \5d");
+    SHELL_putChar(DEBUG_VBEINFO->signature[0]);
+    SHELL_putChar(DEBUG_VBEINFO->signature[1]);
+    SHELL_putChar(DEBUG_VBEINFO->signature[2]);
+    SHELL_putChar(DEBUG_VBEINFO->signature[3]);
+
+    SHELL_Print("\n  \5yVersion: \5d0x");
+    STR_int2str(DEBUG_VBEINFO->version, digits, 16);
+    SHELL_Print(digits);
+
+    SHELL_Print("\n  \5yOEM Name: \5d");
+    SHELL_Print((char *)((DEBUG_VBEINFO->oem_string_ptr >> 12) + (DEBUG_VBEINFO->oem_string_ptr & 0xFFFF)));
+
+    SHELL_putChar('\n');
+}
+
+void DEBUG_print_modes(void) {
+
+}
+
+void DEBUG_print_mode_info(int modeIndex) {
+
 }
