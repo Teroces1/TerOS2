@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include "Shell/Shell.h"
 #include "drivers/VBE/VBE.h"
+#include "WindowManager.h"
 
 typedef struct Window_ {
     bool isKernel;
@@ -45,6 +46,21 @@ void WINDOW_Render() {
     }
 
     current->render();
+}
+
+void WINDOW_OnInput(uint16_t code) {
+    int i = 0;
+    Window *current = &Root;
+    while (i < WINDOW_INDEX && current != NULL) {
+        current = current -> next;
+        i++;
+    }
+
+    if (current == NULL) {
+        return;
+    }
+
+    current->onInput(code);
 }
 
 // TODO: later, user programs (apps) can run in seperate windows with their own graphics and stuff

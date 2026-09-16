@@ -12,7 +12,7 @@
 volatile uint32_t* volatile VBE_framebuffer;
 unsigned int VBE_bytesPerScanline;
 
-int fontID = 1;
+int fontID = 2;
 
 int cursorX = 0;
 int cursorY = 0;
@@ -103,6 +103,7 @@ void VBE_PutCharacter(char c, int x, int y, unsigned int color, unsigned int bac
     }
 }
 
+
 void VBE_PutString(const char *str, int x, int y, unsigned int color, unsigned int backColor) {
     int i = 0;
     while (str[i] != '\0') {
@@ -111,13 +112,17 @@ void VBE_PutString(const char *str, int x, int y, unsigned int color, unsigned i
     }
 }
 
-void VBE_PutTerminalString(const char *str, int x, int y, int maxLength, unsigned int color, unsigned int backColor) {
+void VBE_PutTerminalString(const char *str, int x, int y, int maxLength, int cursor, unsigned int color, unsigned int backColor) {
     int i = 0;
+    int realLength = 0;
     unsigned int currentColor = color;
+    bool nextCharIsCursor = false;
     while (str[i] != '\0' && i < maxLength) {
         if (str[i] == (char) 5) {
+            if (i == cursor || i+1 == cursor)
+                nextCharIsCursor = true;
             i++;
-            switch(i) {
+            switch(str[i]) {
                 case 'w':
                     currentColor = VBEC_WHITE;
                     break;
@@ -139,8 +144,11 @@ void VBE_PutTerminalString(const char *str, int x, int y, int maxLength, unsigne
                 case 'y':
                     currentColor = VBEC_YELLOW;
                     break;
-                case 'd':
+                case 'B':
                     currentColor = VBEC_BLACK;
+                    break;
+                case 'd':
+                    currentColor = color;
                     break;
                 case '\0':
                     i--;    // will auto end next iteration
@@ -149,8 +157,23 @@ void VBE_PutTerminalString(const char *str, int x, int y, int maxLength, unsigne
             i++;
             continue;
         }
-        VBE_PutCharacter(str[i], x + 8*i, y, color, backColor);
+        
+        
+        if (i == cursor || nextCharIsCursor) {
+            int tempFont = fontID;
+            // fontID = 1; // special charcaters
+            // VBE_PutCharacter(str[i], x + 8*realLength, y, currentColor, backColor);
+            // fontID = tempFont;
+
+
+            // VBE_DrawRectangle(x + 8*realLength + 1, y+12, 6, 2, color);
+            VBE_PutCharacter(str[i], x + 8*realLength, y, backColor, color);
+            nextCharIsCursor = false;
+        } else {
+            VBE_PutCharacter(str[i], x + 8*realLength, y, currentColor, backColor);
+        }
         i++;
+        realLength++;
     }
 }
 

@@ -27,6 +27,7 @@ unsigned int VBE_FROM_HUE(unsigned int hue);
 
 void VBE_SetPixel(int x, int y, unsigned int color);
 
-void VBE_PutTerminalString(const char *str, int x, int y, int maxLength, unsigned int color, unsigned int backColor);
+void VBE_PutTerminalString(const char *str, int x, int y, int maxLength, int cursor, unsigned int color, unsigned int backColor);
+
 
 #endif

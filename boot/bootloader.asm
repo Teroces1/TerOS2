@@ -2,7 +2,7 @@
 ; STAGE 2 OF BOOTLOADER
 ; ---------------------------
 
-%define NUM_SECTORS 30
+%define NUM_SECTORS 50
 %define KERNEL_SECTOR 5
 %define KERNEL_START_SEGMENT 0x3000
 %define KERNEL_START 0x30000

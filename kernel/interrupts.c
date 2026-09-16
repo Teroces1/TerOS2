@@ -101,7 +101,7 @@ void pic_remap(void) {
     outb(PIC2_DATA, 0xFF); // Disable all on Slave PIC
 }
 
-DEFINE_ISR(keyboard_isr_wrapper, keyboard_isr);
+// DEFINE_ISR(keyboard_isr_wrapper, keyboard_isr);
 
 void init_interrupts(void) {
     // 1. Hook the Assembly stub up to vector 0x21 (Keyboard)

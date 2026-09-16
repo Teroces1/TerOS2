@@ -8,4 +8,6 @@ void SHELL_Render();
 
 void SHELL_OnInput(uint16_t key);
 
+void SHELL_Print(char *str);
+
 #endif
