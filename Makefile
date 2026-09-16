@@ -130,7 +130,7 @@ $(IMAGE): $(IMAGE_DEPS)
 	fi
 	@if [ -f $(BUILD_DIR)/kernel.bin ]; then \
 		echo " -> Injecting Kernel (Sector 5)..."; \
-		dd if=$(BUILD_DIR)/kernel.bin of=$(IMAGE) bs=512 seek=5 conv=notrunc status=none; \
+		dd if=$(BUILD_DIR)/kernel.bin of=$(IMAGE) bs=512 seek=6 conv=notrunc status=none; \
 	fi
 	@echo "OS Image built successfully!"
 

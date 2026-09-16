@@ -165,3 +165,64 @@ char* STR_int2str(int value, char *buffer, const int base) {
 
     return buffer;
 }
+
+char* STR_64int2str(int64_t value, char *buffer, const int64_t base) {
+    if (!buffer) return NULL;
+    if (base < 2 || base > 16) {
+        buffer[0] = '\0';
+        return buffer;
+    }
+
+    int isNegative = 0;
+    if (value < 0 && base == 10) {
+        isNegative = 1;
+        value = -value;
+    }
+
+    int i = 0;
+    do {
+        buffer[i++] = digits[value % base];
+        value /= base;
+    } while (value > 0);
+
+    if (isNegative) {
+        buffer[i++] = '-';
+    }
+
+    buffer[i] = '\0';
+
+    // reverse
+    for (int j = 0, k = i - 1; j < k; j++, k--) {
+        char temp = buffer[j];
+        buffer[j] = buffer[k];
+        buffer[k] = temp;
+    }
+
+    return buffer;
+}
+
+char* STR_CEncode(char* str) {
+    if (!str) return;
+
+    int read_ptr = 0;
+    int write_ptr = 0;
+
+    while (str[read_ptr] != '\0') {
+        // Look for the literal characters '\' followed by '5'
+        if (str[read_ptr] == '\\' && str[read_ptr + 1] == '5') {
+            str[write_ptr] = 0x05; // Replace with your raw special byte
+            read_ptr += 2;         // Skip both input characters ('\' and '5')
+            write_ptr++;           // Advance write pointer by one byte
+        } else {
+            // Standard character copy/shift
+            str[write_ptr] = str[read_ptr];
+            read_ptr++;
+            write_ptr++;
+        }
+    }
+
+    // Always null-terminate the shortened string
+    str[write_ptr] = '\0';
+
+    return str;
+}

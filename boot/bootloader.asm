@@ -3,7 +3,7 @@
 ; ---------------------------
 
 %define NUM_SECTORS 50
-%define KERNEL_SECTOR 5
+%define KERNEL_SECTOR 6
 %define KERNEL_START_SEGMENT 0x3000
 %define KERNEL_START 0x30000
 %define PML4_ADDR 0x20000
@@ -73,6 +73,22 @@ Stage2_Start:
     mov si, Str_stage_2_loaded
     call Print_String
 
+    ; get disk properties
+    mov ah, 0x08
+    mov dl, [BootDrive]
+    xor di, di           ; Guard against some buggy BIOSes
+    mov es, di
+    int 0x13
+    
+    ; CL (bits 0-5) contains max sectors per track
+    and cl, 0x3F
+    mov [DriveSectors], cl
+    
+    ; DH contains max head index (0-based, so add 1 for total heads)
+    inc dh
+    mov [DriveHeads], dh
+
+
 
     mov word [VBEInfoBlock], 'VB'      ; 'V' 'B'
     mov word [VBEInfoBlock+2], 'E2'    ; 'E' '2'
@@ -109,14 +125,20 @@ Stage2_Start:
     push bx
     push fs
     push cx
+    push bx
 
     mov ax, 0x4F01          ; VESA Get Mode Info function
     int 0x10
 
+    pop cx
+    pop bx  ; bx should contain the mode number
+
+    cmp ax, 0x004F          ; check if success
+    jne .mode_loop_fail
+
     ; test if its (Mode 31): 1024x768 @ 32bpp | Framebuffer: 0xFD000000
     ; x-res: 18, y-res: 20, bpp: 25, buff: 40
 
-    pop bx  ; bx should contain the mode number
     mov ax, [es:di + 18]
     cmp ax, 1024
     jne .mode_part2
@@ -139,15 +161,31 @@ Stage2_Start:
     mov [BytesPerScanLine], ax
 
     
+    mov [ModeSelected], bx
+    mov [ModeSelectedIndex], cx
 
     mov ax, 0x4F02          ; VBE function: Set VBE Mode
-    or bx, 0xC000          ; add the flags to use linear frame buffer (0x4000), and to not clear screen (0x8000)
 
-    mov [ModeSelected], bx
+    or bx, 0xC000          ; add the flags to use linear frame buffer (0x4000), and to not clear screen (0x8000)
     int 0x10
 
     cmp ax, 0x004F
     jne VBE_failed
+
+    jmp .mode_part2
+
+.mode_loop_fail:
+    mov bl, byte [NumModesFailed]
+    inc bl
+    mov byte [NumModesFailed], bl
+
+    pop fs
+    pop bx
+    pop es
+    pop si
+
+    jmp .mode_loop_continue
+
 
 .mode_part2:
 
@@ -157,8 +195,6 @@ Stage2_Start:
     pop es
     pop si
 
-    cmp ax, 0x004F          ; check if success
-    jne .mode_loop_continue
 
     add di, 256             ; incremenet destination
     inc bx                  ; incremenet counter
@@ -168,7 +204,7 @@ Stage2_Start:
     jmp .mode_loop
 .mode_loop_exit:
     ; now all the information should be saved at 0x10000
-    mov [NumModes], bx
+    mov byte [NumModes], bl
 
     mov si, Str_modes_read
     call Print_String
@@ -250,10 +286,21 @@ VariablesPacket:
 BootDrive:      db 0
 Retries:        db 0
 NumModes:       db 0
+NumModesFailed: db 0
 UsingLBA:       db 0
 ModeSelected:   dw 0xFFFF
+ModeSelectedIndex: db 0
 FrameBuffer: dd 0x00000000
 BytesPerScanLine: dw 0x0000
+CPUVendor: times 13 db 0
+BaseMemoryKB: dw 0
+DriveHeads:   db 0
+DriveSectors: db 0
+CPUFeatures: dd 0
+E820Count:      dw 0
+E820Map:        times 24 * 32 db 0  ; 32 entries, 24 bytes each
+
+
 
 align 16
 VBEInfoBlock: times 512 db 0
@@ -398,6 +445,46 @@ _ReadTryCHS_loop:
     jb _ReadTryCHS_loop
     jmp disk_error
 
+get_e820:
+    ; ==========================================
+    ; Get E820 Memory Map
+    ; ==========================================
+    xor ax, ax                ; <--- ADD THIS: Clear AX
+    mov es, ax                ; <--- ADD THIS: Force ES back to 0!
+
+    mov di, E820Map           ; ES:DI now correctly points to 0x0000:E820Map
+    xor ebx, ebx              
+    mov word [E820Count], 0   ; Initialize count to 0 in memory
+
+.e820_loop:
+    mov eax, 0xE820           
+    mov ecx, 24               
+    mov edx, 0x534D4150       
+    int 0x15
+    
+    jc .e820_done             
+    cmp eax, 0x534D4150       
+    jne .e820_done
+
+    ; Because DS and ES are both 0 now, this will read the actual data!
+    mov ecx, [di + 8]
+    or ecx, [di + 12]
+    jz .skip_entry            
+
+    inc word [E820Count]      ; Increment memory directly (ignore BP)
+    add di, 24                
+    
+    cmp word [E820Count], 32  
+    je .e820_done
+
+.skip_entry:
+    test ebx, ebx             
+    jz .e820_done
+    jmp .e820_loop            
+
+.e820_done:
+    ret
+
 ; ---------------------------
 ; Protected Mode Start, Final Stage of Bootloader
 ; ---------------------------
@@ -434,8 +521,27 @@ wait_input_empty:
 
 ReadOK:
     ; switch to protected mode and then jump to kernel at 0x2000:0000
+
     call enable_A20
     lgdt [gdt_ptr]
+
+    ; get CPU info and features
+    mov eax, 0
+    cpuid
+    mov dword [CPUVendor], ebx
+    mov dword [CPUVendor+4], edx
+    mov dword [CPUVendor+8], ecx
+
+    mov eax, 1
+    cpuid
+    mov [CPUFeatures], edx  ; EDX contains the feature flags
+
+    int 0x12
+    mov [BaseMemoryKB], ax
+
+    call get_e820
+
+    ; now finally, turn on protected mode
 
     mov eax, cr0
     or  eax, 1               ; set PE bit
@@ -566,4 +672,4 @@ init_long_mode:
 
 
 
-times 1536 - ($ - $$) db 0
+times 2560 - ($ - $$) db 0

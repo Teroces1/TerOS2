@@ -2,6 +2,8 @@
 #include <stdbool.h>
 #include "../drivers/VBE/VBE.h"
 #include "../drivers/Keyboard/keyboard.h"
+#include "../../lib/string.h"
+#include "Debug.h"
 
 
 #define WIDTH 128
@@ -10,8 +12,9 @@
 #define TERMINAL_ROTATE_MASK 0xFF
 #define BOTTOM_PADDING 5    // leave 5 lines at the bottom clear
 #define BOTTOM_PADDING_WHEN_FOCUS 40    // always leave majority white space when CTRL+F
+#define MAX_COMMAND_LENGTH (WIDTH*4+2)
 
-char commandBuffer[WIDTH*4+1];    // make it big just in case
+char commandBuffer[MAX_COMMAND_LENGTH];    // make it big just in case
 int commandLength = 0;
 int commandCursor = 0;
 char terminal[TERMINAL_HEIGHT][WIDTH*2+1];  // larger width just in case the entire line is filled with color symbols
@@ -40,6 +43,11 @@ void clear() {
     topScreenSize = 0;
     modifiedSinceLastRefresh = true;
     updateDone = true;
+
+    for (int i = 0; i < MAX_COMMAND_LENGTH; i++) {
+        commandBuffer[i] = ' ';
+    }
+    commandBuffer[MAX_COMMAND_LENGTH-1] = '\0';
 }
 
 char shellPrefix[] = "0g$KERNEL$> 0d";
@@ -51,21 +59,42 @@ void SHELL_Init() {
     clear();
 
     acceptCommand();
+
+    // char digits[10];
+    // STR_int2str(GetScreenSize(top, shellCursorX), digits, 10);
+    // SHELL_Print(digits);
 }
 
 
 void acceptCommand() {
     SHELL_Print(shellPrefix);
+    for (int i = 0; i < MAX_COMMAND_LENGTH; i++) {
+        commandBuffer[i] = ' ';
+    }
+    commandBuffer[MAX_COMMAND_LENGTH-1] = '\0';
+    commandCursor = 0;
+
     canType = true;
 }
+
+
 
 // will be run from a timer interrupt, so no other interrupts can happen while this is running. is this right?
 void SHELL_Render() {
     if (runningCommandFlag) {
         RunCommand();
+        modifiedSinceLastRefresh = true;
     }
 
     if (modifiedSinceLastRefresh && updateDone) {
+        SHELL_hidden_print(commandBuffer);
+        int screenSize = GetScreenSize(shellCursorY, shellCursorX);
+        int virtualCursorX = (screenSize + commandCursor) % WIDTH;
+        if (virtualCursorX == (screenSize + commandCursor))
+            virtualCursorX = shellCursorX + commandCursor;
+
+        int virtualCursorY = (shellCursorY + (screenSize + commandCursor) / WIDTH) & TERMINAL_ROTATE_MASK;
+
         modifiedSinceLastRefresh = false;
 
         VBE_ClearScreen(VBEC_BLACK);
@@ -73,7 +102,8 @@ void SHELL_Render() {
         for (int i = 0; i < HEIGHT; i++) {
             int index = (first + i) & TERMINAL_ROTATE_MASK;
             // draw entry to screen
-            int cursor = index == shellCursorY ? shellCursorX : -1;
+            int cursor = index == virtualCursorY ? virtualCursorX : -1;
+            
 
             VBE_PutTerminalString(terminal[index], 0, i << 4, WIDTH*2+1, cursor, VBEC_WHITE, VBEC_BLACK);   // has a max string limit of WIDTH*2+1
 
@@ -141,12 +171,28 @@ void SHELL_putChar(char c) {
     }
 }
 
+int GetScreenSize(int index, int cursor) {
+    int size = 0;
+    for (int i=0; i < cursor; i++) {
+        if (terminal[index][i] == 5) {
+            i++;
+        } else {
+            size++;
+        }
+    }
+
+    return size;
+}
+
 void SHELL_Print(char *str) {
     updateDone = false;
+
+    int currentScreenSize = GetScreenSize(shellCursorY, shellCursorX);
+    
     
     int i = 0;
     while (str[i] != '\0') {
-        terminal[top][shellCursorX] = str[i];
+        terminal[shellCursorY][shellCursorX] = str[i];
         if (str[i] == (char) 5) {   // color escape code
             i++;
             shellCursorX++;
@@ -154,23 +200,25 @@ void SHELL_Print(char *str) {
             if (str[i] == '\0')
                 i--;
             else {
-                terminal[top][shellCursorX] = str[i];
+                terminal[shellCursorY][shellCursorX] = str[i];
                 i++;
                 shellCursorX++;
             }
         } else if (str[i] == '\n') {
-            terminal[top][shellCursorX] = ' ';
+            terminal[shellCursorY][shellCursorX] = ' ';
             _nextLine();
             i++;
+            currentScreenSize = 0;
         } else {
             i++;
             shellCursorX++;
-            topScreenSize++;
+            currentScreenSize++;
         }
 
-        if (topScreenSize >= WIDTH || shellCursorX >= WIDTH*2-2) {
-            terminal[top][shellCursorX] = '\0';
+        if (currentScreenSize >= WIDTH || shellCursorX >= WIDTH*2-2) {
+            terminal[shellCursorY][shellCursorX] = '\0';
             _nextLine();
+            currentScreenSize = 0;
         }
     }
     
@@ -178,10 +226,30 @@ void SHELL_Print(char *str) {
     updateDone = true;
 }
 
+void SHELL_hidden_print(char *str) {
+    int savedCursorX = shellCursorX;
+    int savedCursorY = shellCursorY;
+
+    SHELL_Print(str);
+
+    shellCursorX = savedCursorX;
+    shellCursorY = savedCursorY;
+}
+
 void EnterCommand() {
     updateDone = false;
 
     canType = false;
+
+    // just to make sure command doesnt take up more space than it needs to on the console
+    for (int i = MAX_COMMAND_LENGTH-2; i>=0; i--) {
+        if (commandBuffer[i] == ' ' || commandBuffer[i] == '\n' || commandBuffer[i] == '\0') {
+            commandBuffer[i] = '\0';
+        } else {
+            break;
+        }
+    }
+    SHELL_Print(commandBuffer);
 
     SHELL_putChar('\n');
 
@@ -191,11 +259,15 @@ void EnterCommand() {
 
 
     runningCommandFlag = true;
-    
-    // match and run command
 }
 
 void RunCommand() {
+    // match and run command
+    if (STR_strcmp(commandBuffer, "hello") == 0) {
+        SHELL_Print("world\n");
+    } else if (STR_strcmp(commandBuffer, "bootinfo") == 0) {
+        DEBUG_print_entry();
+    }
 
 
     runningCommandFlag = false;
@@ -211,12 +283,29 @@ int getLastCharacter(int entryIndex) {
     return i;
 }
 
-int backspaceOnCommand() {
-    if (commandCursor == 0) return;
+void backspaceOnCommand() {
+    if (commandCursor <= 0) return;
 
-    // for (int i = commandCursor)
+    for (int i = commandCursor; i <= MAX_COMMAND_LENGTH-2; i++) {
+        commandBuffer[i-1] = commandBuffer[i];
+    }
+    commandBuffer[MAX_COMMAND_LENGTH-2] = ' ';
 
     commandCursor --;
+}
+
+void insertCharacterOnCommand(char c) {
+    if (commandCursor > MAX_COMMAND_LENGTH-2) {
+        commandCursor = MAX_COMMAND_LENGTH-1;
+        return;
+    }
+
+    for (int i = MAX_COMMAND_LENGTH-3; i >= commandCursor; i--) {
+        commandBuffer[i+1] = commandBuffer[i];
+    }
+
+    commandBuffer[commandCursor] = c;
+    commandCursor++;
 }
 
 void SHELL_OnInput(uint16_t keycode) {
@@ -248,13 +337,12 @@ void SHELL_OnInput(uint16_t keycode) {
     } else if (!(other || special)) {
         // regular key press
 
-        if (canType && commandLength < WIDTH*4) {
+        if (canType && commandCursor < WIDTH*4) {
             if (secondary) {
                 key = KEYBOARD_SECONDARY[key];
             }
-
-            SHELL_putChar(key);
-            commandLength++;
+            
+            insertCharacterOnCommand(key);
         }
     } else if (special == 1) {
         // control key
@@ -275,35 +363,46 @@ void SHELL_OnInput(uint16_t keycode) {
                 }
                 break;
             case '\b':
-            case 'L':   // left
-                if (shellCursorX == 0) {
-                    // needs to decrement cursor y, but cant if its going to be the top index
-                    if (shellCursorY-1 == top)
-                        break;
-
-                    shellCursorY = (shellCursorY - 1) & TERMINAL_ROTATE_MASK;
-                    shellCursorX = getLastCharacter(shellCursorY);
-                    if (shellCursorX < WIDTH*2)
-                        shellCursorX ++;    // normally the cursor would go after the last character
-                } else {
-                    shellCursorX --;
-                    if (key == '\b')
-                        terminal[shellCursorY][shellCursorX] = ' ';
-                }
+                backspaceOnCommand();
                 break;
-            case 'R':   // right
-                int lastChar = getLastCharacter(shellCursorY);
-                if (shellCursorX > lastChar) {
-                    // needs to incremement cursor y, but cant if its at the top
-                    if (shellCursorY == top)
-                        break;
-
-                    shellCursorY = (shellCursorY + 1) & TERMINAL_ROTATE_MASK;
-                    shellCursorX = 0;
-                } else {
-                    shellCursorX ++;
-                }
+            case 'L':
+                if (commandCursor > 0)
+                    commandCursor --;
                 break;
+            case 'R':
+                if (commandCursor < MAX_COMMAND_LENGTH -1)
+                    commandCursor ++;
+                break;
+            // case '\b':
+            // case 'L':   // left
+            //     if (shellCursorX == 0) {
+            //         // needs to decrement cursor y, but cant if its going to be the top index
+            //         if (shellCursorY-1 == top)
+            //             break;
+
+            //         shellCursorY = (shellCursorY - 1) & TERMINAL_ROTATE_MASK;
+            //         shellCursorX = getLastCharacter(shellCursorY);
+            //         if (shellCursorX < WIDTH*2)
+            //             shellCursorX ++;    // normally the cursor would go after the last character
+            //     } else {
+            //         shellCursorX --;
+            //         if (key == '\b')
+            //             terminal[shellCursorY][shellCursorX] = ' ';
+            //     }
+            //     break;
+            // case 'R':   // right
+            //     int lastChar = getLastCharacter(shellCursorY);
+            //     if (shellCursorX > lastChar) {
+            //         // needs to incremement cursor y, but cant if its at the top
+            //         if (shellCursorY == top)
+            //             break;
+
+            //         shellCursorY = (shellCursorY + 1) & TERMINAL_ROTATE_MASK;
+            //         shellCursorX = 0;
+            //     } else {
+            //         shellCursorX ++;
+            //     }
+            //     break;
         }
     }
 

@@ -27,5 +27,8 @@ const char* STR_strrchr(const char* str, int c);
 const char* STR_strstr(const char* haystack, const char* needle);
 
 char* STR_int2str(int value, char *buffer, const int base);
+char* STR_64int2str(int64_t value, char *buffer, const int64_t base);
+
+char* STR_CEncode(char* str);
 
 #endif

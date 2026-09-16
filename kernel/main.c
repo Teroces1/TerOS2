@@ -4,6 +4,7 @@
 #include "../lib/string.h"
 #include "interrupts.h"
 #include "WindowManager.h"
+#include "Shell/Debug.h"
 
 #define VGA_WIDTH 80
 #define VGA_HEIGHT 25
@@ -21,15 +22,7 @@ UsingLBA:       db 0
 ModeSelected:   db 0xFFFF
 FrameBuffer: dd 0x0000
 */
-typedef struct __attribute__((packed)) {
-    uint8_t BootDrive;
-    uint8_t ReadRetries;
-    uint8_t TotalModes;
-    uint8_t UsingLBA;
-    uint16_t ModeIndexSelected; // default 0xFFFF if none
-    uint32_t FrameBuffer;
-    uint16_t BytesPerScanline;
-} EntryPacket;
+
 
 
 
@@ -38,6 +31,7 @@ void kernel_main(const EntryPacket* entryPacket, const VBEInfoBlock* vbe_info) {
     VBE_bytesPerScanline = entryPacket->BytesPerScanline;
     VBE_ClearFrontScreen(VBEC_BLACK); // Black background
 
+    DEBUG_init(entryPacket);
     WINDOW_Init();
 
 
@@ -46,10 +40,13 @@ void kernel_main(const EntryPacket* entryPacket, const VBEInfoBlock* vbe_info) {
     // SHELL_Print("Hello World!");
     WINDOW_Render();
 
+    
 
     // char digits[10];
 
-    // STR_int2str(VBE_bytesPerScanline, digits, 10);
+    // STR_int2str(entryPacket->ModeIndexSelected, digits, 10);
+
+    // SHELL_Print(digits);
 
     // VBE_PutString("Hello from 64-bit land!", 600, 410, VBEC_WHITE);
     // VBE_PutString(digits, 600, 426, VBEC_WHITE);

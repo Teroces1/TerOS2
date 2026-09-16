@@ -161,9 +161,9 @@ Read2ndStage_CHS:     ; cylinder, head, sector
     xor ax, ax
     mov [UsingLBA], al
     ; Load 2 sectors at 0000:10000h (ES=1000h, BX=0000h)
-    mov ax, 0x1000  ; load at 0x10000 (segment 1000 * 16 = address 10000)
+    mov ax, 0x0000  ; load at 0x10000 (segment 1000 * 16 = address 10000)
     mov es, ax
-    xor bx, bx
+    mov bx, 0x7E00
 
     ; reset disk first
     mov dl, [BootDrive]
@@ -172,7 +172,7 @@ Read2ndStage_CHS:     ; cylinder, head, sector
 _ReadTryCHS_loop:
     mov dl, [BootDrive]
     mov ah, 0x02         ; read sectors (CHS)
-    mov al, 3            ; number of sectors
+    mov al, 5            ; number of sectors
     xor ch, ch           ; cylinder 0
     mov cl, 2            ; sector 2
     xor dh, dh           ; head 0
@@ -214,7 +214,7 @@ BootDrive:       db 0
 Struct_DiskAddressPacket_2ndStage:
     db 0x10       ; size of packet (16 bytes)
     db 0          ; reserved
-    dw 3          ; number of sectors to read
+    dw 5          ; number of sectors to read
     dw 0x7E00     ; buffer offset
     dw 0x0000     ; buffer segment
     dq 0x00000001 ; starting LBA (sector 1)
