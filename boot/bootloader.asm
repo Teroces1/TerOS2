@@ -3,7 +3,8 @@
 ; ---------------------------
 
 %define NUM_SECTORS 80
-%define KERNEL_SECTOR 6
+%define KERNEL_SECTOR 9
+%define BOOT_SETTINGS_SECTOR 8
 %define KERNEL_START_SEGMENT 0x3000
 %define KERNEL_START 0x30000
 %define PML4_ADDR 0x20000
@@ -58,17 +59,132 @@ Print_hex:
     int 0x10
     ret
 
+Print_word:
+    mov cx, 0
+.push_loop:
+    mov dx, 0
+    mov bx, 10
+    div bx
+    add dl, '0'
+    push dx
+    inc cx
+    cmp ax, 0
+    jne .push_loop
+
+    mov bx, 5
+    sub bx, cx
+
+.print_loop:
+    pop ax
+    mov ah, 0x0E
+    push bx
+    int 0x10
+    pop bx
+    loop .print_loop
+
+    mov cx, bx
+.padding_loop:
+    mov al, ' '
+    mov ah, 0x0E
+    int 0x10
+    loop .padding_loop
+
+    ret
 
 disk_error:
     mov si, Str_disk_error
     call Print_String
     jmp $
 
+
+read_kernel:
+    cmp al, 0
+    je ReadTryCHS
+    jmp ReadTryLBA
+
+SaveSettings:
+    cmp byte [UsingLBA], 0
+    je .SaveUsingCHS
+
+    mov ah, 0x43            ; BIOS Extended Write Sectors
+    mov dl, [BootDrive]    ; Drive number
+    mov si, Struct_BootSettingsPacket
+    int 0x13
+    jc .SaveUsingCHS
+    ret
+
+.SaveUsingCHS:
+    xor ax, ax
+    mov es, ax
+
+    mov ah, 0x03        ; BIOS Write Sectors
+    mov al, 1           ; 1 Sector
+    mov ch, 0           ; Cylinder 0
+    mov cl, BOOT_SETTINGS_SECTOR+1 ; Sector 6 (LBA 5)
+    mov dh, 0           ; Head 0
+    mov dl, [BootDrive]
+    mov bx, 0x1000      ; Source buffer
+    int 0x13
+    jc .SaveFailed
+    ret
+
+.SaveFailed:
+    mov si, Str_disk_write_error
+    call Print_String
+    jmp $
+
+STR_TESTTT:
+    db "lolololol", 0
+
 Stage2_Start:
     mov byte [BootDrive], dl
     mov byte [UsingLBA], al
-    push ax
 
+    call read_kernel
+
+    cmp dword [0x1000], 0x464E4F43  ; "CONF"
+    je .settings_loaded
+
+    ; load in default boot settings
+    mov dword [0x1000], 0x464E4F43  ; Signature "CONF"
+    mov word [0x1004], 1024         ; Default Width
+    mov word [0x1006], 768          ; Default Height
+    mov word [0x1008], 32           ; default bpp
+    call SaveSettings
+
+.settings_loaded:
+    ; wait for like 2 seconds, test if user presses escape
+
+    ; first get current tick
+    mov ah, 0x00
+    int 0x1A    ; cx = high, dx = low, al = midnight rollover flag
+    add dx, 45   ; 1 sec ~ 18.2 ticks, so 2.5 sec = 45
+
+    push dx
+.waiting_loop:
+    ; non-blocking keyboard poll
+    mov ah, 0x01
+    int 0x16
+    jz .continue_waiting_loop   ; if zero flag, theres no key
+
+    mov ah, 0x00
+    int 0x16    ; al contains ascii code, ah contains scancode
+
+    cmp ah, 0x01    ; escape
+    jne .continue_waiting_loop
+
+    call ChangeBootSettings
+
+
+.continue_waiting_loop:
+    mov ah, 0x00
+    int 0x1A    ; cx = high, dx = low, al = midnight rollover flag
+    pop cx
+    push cx
+    cmp dx, cx
+    jl .waiting_loop
+
+.start_mode_selection:
     xor ax, ax
     mov es, ax
     mov ds, ax
@@ -142,14 +258,14 @@ Stage2_Start:
     ; x-res: 18, y-res: 20, bpp: 25, buff: 40
 
     mov ax, [es:di + 18]
-    cmp ax, 1024
+    cmp ax, [0x1004]
     jne .mode_part2
     mov ax, [es:di + 20]
-    cmp ax, 768
+    cmp ax, [0x1006]
     jne .mode_part2
     xor ax, ax
     mov al, [es:di + 25]
-    cmp al, 32
+    cmp al, [0x1008]
     jne .mode_part2
 
     ; save the frame buffer
@@ -173,6 +289,8 @@ Stage2_Start:
 
     cmp ax, 0x004F
     jne VBE_failed
+
+    mov byte [VBEEnabled], 1
 
     jmp .mode_part2
 
@@ -207,6 +325,10 @@ Stage2_Start:
 .mode_loop_exit:
     ; now all the information should be saved at 0x10000
     mov byte [NumModes], bl
+
+    mov al, byte [VBEEnabled]
+    cmp al, 1
+    jne VBE_mode_failed
 
     mov si, Str_modes_read
     call Print_String
@@ -243,14 +365,258 @@ Stage2_Start:
     ; jne VBE_failed
     ;;;;;;;;;;;;;;;;
 
+    jmp switchToProtectedMode
 
-    pop ax
-    cmp al, 0
-    je ReadTryCHS
-    jmp ReadTryLBA
+ChangeBootSettings:
+    mov ah, 0x06    ; scroll up
+    mov al, 0x00    ; 0 lines (clears screen)
+    mov bh, 0x07    ; gray text on black background
+    mov ch, 0x00    ; row of top left corner
+    mov cl, 0x00    ; col of top left corner
+    mov dh, 0x18    ; row of bot right corner
+    mov dl, 0x4F    ; col of bot right corner
+    int 0x10 ; clear screen
+
+    mov ah, 0x02    ; set cursor position
+    mov bh, 0x00    ; page num
+    mov dh, 0x18    ; row
+    mov dl, 0x00    ; col
+    int 0x10
+
+    mov si, Str_BootSet_exit
+    call Print_String
+
+    mov ah, 0x02    ; set cursor position
+    mov bh, 0x00    ; page num
+    mov dh, 0x00    ; row
+    mov dl, 0x00    ; col
+    int 0x10
+
+    
+
+
+    mov si, Str_BootSet_resx
+    call Print_String
+
+    mov ax, [0x1004]
+    call Print_word
+    mov si, Str_BootSet_valuesplitter
+    call Print_String
+    mov ax, [0x1004]
+    call Print_word
+
+    mov si, Str_BootSet_resy
+    call Print_String
+
+    mov ax, [0x1006]
+    call Print_word
+    mov si, Str_BootSet_valuesplitter
+    call Print_String
+    mov ax, [0x1006]
+    call Print_word
+
+    mov si, Str_BootSet_bpp
+    call Print_String
+
+    mov ax, [0x1008]
+    call Print_word
+    mov si, Str_BootSet_valuesplitter
+    call Print_String
+    mov ax, [0x1008]
+    call Print_word
+
+    mov cx, 14
+.temploop1:
+    mov ax, [0x1004]
+    mov si, cx
+    shl si, 1
+    cmp ax, word [BootSettingsCycledXValues + si]
+    je .temploop1exit
+    loop .temploop1
+.temploop1exit:
+    mov [XRESCYCLE], cx
+
+
+    mov cx, 18
+.temploop2:
+    mov ax, [0x1006]
+    mov si, cx
+    shl si, 1
+    cmp ax, [BootSettingsCycledYValues + si]
+    je .temploop2exit
+    loop .temploop2
+.temploop2exit:
+    mov [YRESCYCLE], cx
+
+    mov cx, 7
+.temploop3:
+    mov ax, [0x1008]
+    mov si, cx
+    shl si, 1
+    cmp ax, [BootSettingsCycledBPPValues + si]
+    je .temploop3exit
+    loop .temploop3
+.temploop3exit:
+    mov [BPPCYCLE], cx
+
+
+    mov ah, 01h    ; BIOS function: Set Cursor Type
+    mov ch, 20h    ; Setting bit 5 hides the cursor in most BIOSes
+    mov cl, 00h    ; End scan line
+    int 10h        ; Call BIOS video service
+
+.ChangeBootLoop:
+    ; print out updated values:
+
+
+    mov ah, 0x02    ; set cursor position
+    mov bh, 0x00    ; page num
+    mov dh, 3    ; row
+    mov dl, 28    ; col
+    int 0x10
+
+    mov si, [XRESCYCLE]
+    shl si, 1
+    mov ax, word [BootSettingsCycledXValues + si]
+    call Print_word
+
+    mov al, ' '
+    mov ah, 0x0E
+    int 0x10
+
+    mov ah, 0x02    ; set cursor position
+    mov bh, 0x00    ; page num
+    mov dh, 4    ; row
+    mov dl, 28    ; col
+    int 0x10
+
+    mov si, [YRESCYCLE]
+    shl si, 1
+    mov ax, word [BootSettingsCycledYValues + si]
+    call Print_word
+
+    mov al, ' '
+    mov ah, 0x0E
+    int 0x10
+
+    mov ah, 0x02    ; set cursor position
+    mov bh, 0x00    ; page num
+    mov dh, 5    ; row
+    mov dl, 28    ; col
+    int 0x10
+
+    mov si, [BPPCYCLE]
+    shl si, 1
+    mov ax, word [BootSettingsCycledBPPValues + si]
+    call Print_word
+
+    mov al, ' '
+    mov ah, 0x0E
+    int 0x10
+
+    mov ah, 0x02    ; set cursor position
+    mov bh, 0x00    ; page num
+    mov dh, byte [SETTCYCLE]    ; row
+    add dh, 3
+    mov dl, 33    ; col
+    int 0x10
+
+    mov al, '<'
+    mov ah, 0x0E
+    int 0x10
+
+
+;     mov bx, 0xffff
+; .stall2:
+    ; dec bx
+    ; jnz .stall2
+
+
+    ; non-blocking keyboard poll
+    mov ah, 0x01
+    int 0x16
+    jz .ChangeBootLoop   ; if zero flag, theres no key
+
+    mov ah, 0x00
+    int 0x16    ; al contains ascii code, ah contains scancode
+
+    cmp ah, 0x1C    ; enter
+    je .ExitChangeBoot
+
+    cmp ah, 0x39    ; space
+    je .CycleValue
+
+    cmp ah, 0x0F    ; tab
+    je .CycleSetting
+
+    jmp .ChangeBootLoop
+
+.CycleSetting:
+    mov ax, [SETTCYCLE]
+    inc ax
+    cmp ax, 2
+    jng .CycleSettingEnd
+    mov ax, 0
+.CycleSettingEnd:
+    mov [SETTCYCLE], ax
+    jmp .ChangeBootLoop
+
+.CycleValue:
+    mov si, [SETTCYCLE]
+    shl si, 1
+    mov ax, [XRESCYCLE + si]
+    mov bx, [BootSettingsMaxCycles + si]
+
+    inc ax
+    cmp ax, bx
+    jng .CycleEnd
+    mov ax, 0
+.CycleEnd:
+    mov [XRESCYCLE + si], ax
+    jmp .ChangeBootLoop
+
+.ExitChangeBoot:
+    mov si, [XRESCYCLE]
+    shl si, 1
+    mov ax, [BootSettingsCycledXValues + si]
+    mov [0x1004], ax
+    mov si, [YRESCYCLE]
+    shl si, 1
+    mov ax, [BootSettingsCycledYValues + si]
+    mov [0x1006], ax
+    mov si, [BPPCYCLE]
+    shl si, 1
+    mov ax, [BootSettingsCycledBPPValues + si]
+    mov [0x1008], ax
+    call SaveSettings
+
+    mov ah, 0x06    ; scroll up
+    mov al, 0x00    ; 0 lines (clears screen)
+    mov bh, 0x07    ; gray text on black background
+    mov ch, 0x00    ; row of top left corner
+    mov cl, 0x00    ; col of top left corner
+    mov dh, 0x18    ; row of bot right corner
+    mov dl, 0x4F    ; col of bot right corner
+    int 0x10 ; clear screen
+
+    ret
+
+BootSettingsCycledXValues: ; 15
+    dw 40, 80, 320, 640, 800, 1024, 1152, 1280, 1400, 1440, 1600, 1680, 1920, 2560, 3840
+BootSettingsCycledYValues: ; 19
+    dw 25, 200, 350, 400, 480, 600, 720, 768, 800, 864, 900, 960, 1024, 1050, 1080, 1200, 1440, 1600, 2160
+BootSettingsCycledBPPValues: ; 8
+    dw 1, 2, 4, 8, 15, 16, 24, 32
+BootSettingsMaxCycles:
+    dw 14, 18, 7
+
 
 VBE_failed:
     mov si, Str_VesaFailed
+    call Print_String
+    jmp $
+VBE_mode_failed:
+    mov si, Str_VBEModeFailed
     call Print_String
     jmp $
 ; ---------------------------
@@ -263,12 +629,36 @@ Str_disk_error:
         "An error occured while loading sectors from disk.", 0x0D, 0x0A, 0
 
 Str_VesaFailed:
-    db "Vesa has failed to load...", 0x0D, 0x0A, 0
+    db "[!] Vesa has failed to load...", 0x0D, 0x0A, 0
+
+Str_VBEModeFailed:
+    db "[!] VBE Mode config not found... edit in settings (ESC)", 0x0D, 0x0A, 0
+
+Str_disk_write_error:
+    db 0x0D, 0x0A, "!!!! Critical Error !!!!", 0x0d, 0x0A, \
+        "An error occured while saving boot settings to disk.", 0x0D, 0x0A, 0
 
 Str_modes_read:
     db "All modes information has been read, count: 0x", 0
 Str_test:
     db "A", 0
+
+Str_BootSet_valuesplitter:
+    db ") : ", 0
+
+Str_BootSet_resx:
+    db "View/ Modify Boot Settings: ", 0x0D, 0x0A, 0x0D, 0x0A, \
+        "Graphics Mode:", 0x0D, 0x0A, \
+        "  Resolution X:   (", 0
+Str_BootSet_resy:
+    db 0x0D, 0x0A, "  Resolution Y:   (", 0
+Str_BootSet_bpp:
+    db 0x0D, 0x0A, "  Bits Per Pixel: (", 0
+
+Str_BootSet_exit:
+    db " [ TAB to move | SPACE to cycle values | ENTER to save and exit ]", 0
+
+; Str_BootSet_
 ; ---------------------------
 ; DAP for loading kernel
 ; ---------------------------
@@ -279,6 +669,14 @@ Struct_DiskAddressPacket:
     dw 0x0000     ; buffer offset
     dw KERNEL_START_SEGMENT     ; buffer segment
     dq KERNEL_SECTOR ; starting LBA (sector 4)
+
+Struct_BootSettingsPacket:
+    db 0x10
+    db 0
+    dw 1
+    dw 0x1000
+    dw 0x0000
+    dq BOOT_SETTINGS_SECTOR
 
 ; ---------------------------
 ; Variables
@@ -302,7 +700,12 @@ CPUFeatures: dd 0
 E820Count:      dw 0
 E820Map:        times 24 * 32 db 0  ; 32 entries, 24 bytes each
 
+VBEEnabled: db 0
 
+XRESCYCLE: dw 0
+YRESCYCLE: dw 0
+BPPCYCLE: dw 0
+SETTCYCLE: dw 0
 
 align 16
 VBEInfoBlock: times 512 db 0
@@ -399,32 +802,43 @@ ReadTryLBA:     ; read using logical block addressing
     int 0x13
     jc ReadTryCHS
 
+    mov si, Struct_BootSettingsPacket
+
+    mov ah, 0x42
+    mov dl, [BootDrive]
+    int 0x13
+    jc ReadTryCHS
+
     jmp ReadOK
 
 ReadTryCHS:     ; cylinder, head, sector
     ; Load 2 sectors at 0000:10000h (ES=1000h, BX=0000h)
-
-    mov ax, KERNEL_START_SEGMENT  ; load at 0x10000 (segment 1000 * 16 = address 10000)
-    mov es, ax
-    xor bx, bx
-
     ; Optional: reset disk first
     mov dl, [BootDrive]
     xor ah, ah           ; AH=00h, reset disk
     int 0x13
 _ReadTryCHS_loop:
-    ; read the vge stub sector
+    ; read the boot settings sector
+    mov ax, 0x0000
+    mov es, ax
+    mov bx, 0x1000
+    
     mov dl, [BootDrive]
     mov ah, 0x02         ; read sectors (CHS)
     mov al, 1  ; number of sectors
     xor ch, ch           ; cylinder 0
-    mov cl, KERNEL_SECTOR ; sector 2
+    mov cl, BOOT_SETTINGS_SECTOR+1 ; sector 2
     xor dh, dh           ; head 0
     ; ES:BX already set
     int 0x13
     jc .fail
 
+
     ; read kernel
+
+    mov ax, KERNEL_START_SEGMENT  ; load at 0x10000 (segment 1000 * 16 = address 10000)
+    mov es, ax
+    xor bx, bx
 
     mov dl, [BootDrive]
     mov ah, 0x02         ; read sectors (CHS)
@@ -446,6 +860,10 @@ _ReadTryCHS_loop:
     cmp byte [Retries], 3
     jb _ReadTryCHS_loop
     jmp disk_error
+
+ReadOK:
+    ret
+
 
 get_e820:
     ; ==========================================
@@ -521,7 +939,7 @@ wait_input_empty:
     ret
 
 
-ReadOK:
+switchToProtectedMode:
     ; switch to protected mode and then jump to kernel at 0x2000:0000
 
     call enable_A20
@@ -602,7 +1020,6 @@ ProtectedModeStart:
     mov eax, 0x00000083    ; Starting physical memory block (Address 0)
     mov [PD_ADDR], eax    ; Save into the first entry of the Page Directory
 
-
     ; vbe backframe 1
     mov eax, 0x00200083
     mov [PD_ADDR+8], eax
@@ -617,12 +1034,14 @@ ProtectedModeStart:
 
     ; vbe frontframe 1
     mov eax, [FrameBuffer]
+    and eax, 0xFFE00000
     or eax, 0x83
     mov [PD_ADDR+32], eax
 
     ; vbe frontframe 2
     mov eax, [FrameBuffer]
     add eax, 0x200000
+    and eax, 0xFFE00000
     or eax, 0x83
     mov [PD_ADDR+40], eax
 
@@ -643,6 +1062,7 @@ ProtectedModeStart:
     mov eax, cr4
     or eax, 1 << 5         ; Set bit 5 (PAE bit) [1]
     mov cr4, eax
+    
     
 ; =====================================================================
 ; STEP 6: Enable Long Mode in the EFER MSR
@@ -681,9 +1101,9 @@ init_long_mode:
 
     mov rdi, VariablesPacket    ; first
     mov rsi, VBEInfoBlock       ; second
-
+    
     jmp KERNEL_START
 
 
 
-times 2560 - ($ - $$) db 0
+times 3584 - ($ - $$) db 0

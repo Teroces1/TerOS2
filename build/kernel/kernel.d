@@ -1,1 +1,2 @@
-build/kernel/kernel.o: kernel/kernel.c
+build/kernel/kernel.o: kernel/kernel.cpp kernel/types.hpp
+kernel/types.hpp:

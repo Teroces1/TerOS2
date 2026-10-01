@@ -14,14 +14,15 @@ AS      = nasm
 
 # --- Compiler / Linker Flags ---
 # Swap -m32 to -m64 for Long Mode (and add -mno-red-zone -mgeneral-regs-only)
-CFLAGS  = -ffreestanding -m64 -O3 -Wall -Wextra -MMD -MP  -fno-pic -fno-pie -fno-plt -fno-stack-protector -mno-red-zone -mgeneral-regs-only
-CXXFLAGS = $(CFLAGS) -fno-exceptions -fno-rtti
+CFLAGS  = -ffreestanding -m64 -O3 -Wall -Wextra -MMD -MP  -fno-pic -fno-pie -fno-plt -fno-stack-protector -mno-red-zone -mgeneral-regs-only -mcmodel=kernel
+CXXFLAGS = $(CFLAGS) -fno-exceptions -fno-rtti -Wall -Wextra
 # Swap elf_i386 to elf_x86_64 for Long Mode
-LDFLAGS = -T linker.ld -m elf_x86_64
+LDFLAGS = -T linker.ld -m elf_x86_64 -z noexecstack --no-warn-rwx-segments
 
 # --- Directories ---
 BUILD_DIR = build
 BOOT_DIR  = boot
+OLD_DIR = old
 
 # ==============================================================================
 # Dynamic File Discovery
@@ -30,9 +31,9 @@ BOOT_DIR  = boot
 BOOT_FLAT_SRCS = ./$(BOOT_DIR)/bootinit.asm ./$(BOOT_DIR)/bootloader.asm ./$(BOOT_DIR)/vge_stub.asm
 
 # Find ALL C and ASM files, ignoring hidden folders and the build dir.
-C_SOURCES   := $(shell find . -type f -name '*.c' -not -path "*/\.*" -not -path "*/python/*" -not -path "./$(BUILD_DIR)/*")
-CXX_SOURCES := $(shell find . -type f -name '*.cpp' -not -path "*/\.*" -not -path "*/python/*" -not -path "./$(BUILD_DIR)/*")
-ALL_ASM     := $(shell find . -type f -name '*.asm' -not -path "*/\.*" -not -path "*/python/*" -not -path "./$(BUILD_DIR)/*")
+C_SOURCES   := $(shell find . -type f -name '*.c' -not -path "*/\.*" -not -path "*/python/*" -not -path "./$(BUILD_DIR)/*" -not -path "./$(OLD_DIR)/*")
+CXX_SOURCES := $(shell find . -type f -name '*.cpp' -not -path "*/\.*" -not -path "*/python/*" -not -path "./$(BUILD_DIR)/*" -not -path "./$(OLD_DIR)/*")
+ALL_ASM     := $(shell find . -type f -name '*.asm' -not -path "*/\.*" -not -path "*/python/*" -not -path "./$(BUILD_DIR)/*" -not -path "./$(OLD_DIR)/*")
 
 # The Kernel ASM sources are ALL ASM files EXCEPT the flat binary bootloader stages.
 # Notice this naturally allows `boot/start.asm` to become part of the kernel objects automatically!
@@ -42,7 +43,7 @@ ASM_SOURCES := $(filter-out $(BOOT_FLAT_SRCS), $(ALL_ASM))
 C_OBJS   := $(patsubst ./%.c, $(BUILD_DIR)/%.o, $(C_SOURCES))
 CXX_OBJS := $(patsubst ./%.cpp, $(BUILD_DIR)/%.o, $(CXX_SOURCES))
 ASM_OBJS := $(patsubst ./%.asm, $(BUILD_DIR)/%.o, $(ASM_SOURCES))
-OBJS     := $(C_OBJS) $(ASM_OBJS)
+OBJS     := $(C_OBJS) $(ASM_OBJS) $(CXX_OBJS)
 
 # ==============================================================================
 # Auto-Configuration Logic
@@ -61,9 +62,9 @@ endif
 ifneq ($(HAS_STAGE2),)
     IMAGE_DEPS += $(BUILD_DIR)/bootloader.bin
 endif
-ifneq ($(HAS_VGESTUB),)
-    IMAGE_DEPS += $(BUILD_DIR)/vge_stub.bin
-endif
+# ifneq ($(HAS_VGESTUB),)
+#     IMAGE_DEPS += $(BUILD_DIR)/vge_stub.bin
+# endif
 ifneq ($(HAS_KERNEL),)
     IMAGE_DEPS += $(BUILD_DIR)/kernel.bin
 endif
@@ -151,13 +152,13 @@ $(IMAGE): $(IMAGE_DEPS)
 		echo " -> Injecting stage2 (Sector 1)..."; \
 		dd if=$(BUILD_DIR)/bootloader.bin of=$(IMAGE) bs=512 seek=1 conv=notrunc status=none; \
 	fi
-	@if [ -f $(BUILD_DIR)/vge_stub.bin ]; then \
-		echo " -> Injecting vge_stub (Sector 4)..."; \
-		dd if=$(BUILD_DIR)/vge_stub.bin of=$(IMAGE) bs=512 seek=4 conv=notrunc status=none; \
-	fi
+# 	@if [ -f $(BUILD_DIR)/vge_stub.bin ]; then \
+# 		echo " -> Injecting vge_stub (Sector 4)..."; \
+# 		dd if=$(BUILD_DIR)/vge_stub.bin of=$(IMAGE) bs=512 seek=4 conv=notrunc status=none; \
+# 	fi
 	@if [ -f $(BUILD_DIR)/kernel.bin ]; then \
 		echo " -> Injecting Kernel (Sector 5)..."; \
-		dd if=$(BUILD_DIR)/kernel.bin of=$(IMAGE) bs=512 seek=6 conv=notrunc status=none; \
+		dd if=$(BUILD_DIR)/kernel.bin of=$(IMAGE) bs=512 seek=9 conv=notrunc status=none; \
 	fi
 	@echo "OS Image built successfully!"
 

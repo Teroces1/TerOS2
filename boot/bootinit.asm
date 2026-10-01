@@ -1,3 +1,5 @@
+%define BOOTLOADER_SECTOTS 7
+
 [BITS 16]         ; 16-bit real mode
 
 org 0x7C00        ; loads at 0x7c00
@@ -172,7 +174,7 @@ Read2ndStage_CHS:     ; cylinder, head, sector
 _ReadTryCHS_loop:
     mov dl, [BootDrive]
     mov ah, 0x02         ; read sectors (CHS)
-    mov al, 5            ; number of sectors
+    mov al, BOOTLOADER_SECTOTS            ; number of sectors
     xor ch, ch           ; cylinder 0
     mov cl, 2            ; sector 2
     xor dh, dh           ; head 0
@@ -214,7 +216,7 @@ BootDrive:       db 0
 Struct_DiskAddressPacket_2ndStage:
     db 0x10       ; size of packet (16 bytes)
     db 0          ; reserved
-    dw 5          ; number of sectors to read
+    dw BOOTLOADER_SECTOTS          ; number of sectors to read
     dw 0x7E00     ; buffer offset
     dw 0x0000     ; buffer segment
     dq 0x00000001 ; starting LBA (sector 1)
