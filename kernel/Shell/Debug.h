@@ -93,4 +93,18 @@ void DEBUG_print_modes(void);
 
 void DEBUG_print_mode_info(int modeIndex);
 
+void DEBUG_print_segment();
+
+void DEBUG_print_cregs();
+
+void DEBUG_print_tables();
+
+void DEBUG_print_efer();
+
+void DEBUG_print_msr(uint32_t msr_id);
+
+void DEBUG_print_memdump(uint64_t address, int rowCount);
+
+void DEBUG_print_idt_gate(int vector);
+
 #endif

@@ -7,6 +7,7 @@
 # 32 bit mode: i686-linux-gnu-
 TOOLCHAIN_PREFIX = x86_64-linux-gnu-
 CC      = $(TOOLCHAIN_PREFIX)gcc
+CXX     = $(TOOLCHAIN_PREFIX)g++
 LD      = $(TOOLCHAIN_PREFIX)ld
 OBJCOPY = $(TOOLCHAIN_PREFIX)objcopy
 AS      = nasm
@@ -14,6 +15,7 @@ AS      = nasm
 # --- Compiler / Linker Flags ---
 # Swap -m32 to -m64 for Long Mode (and add -mno-red-zone -mgeneral-regs-only)
 CFLAGS  = -ffreestanding -m64 -O3 -Wall -Wextra -MMD -MP  -fno-pic -fno-pie -fno-plt -fno-stack-protector -mno-red-zone -mgeneral-regs-only
+CXXFLAGS = $(CFLAGS) -fno-exceptions -fno-rtti
 # Swap elf_i386 to elf_x86_64 for Long Mode
 LDFLAGS = -T linker.ld -m elf_x86_64
 
@@ -29,6 +31,7 @@ BOOT_FLAT_SRCS = ./$(BOOT_DIR)/bootinit.asm ./$(BOOT_DIR)/bootloader.asm ./$(BOO
 
 # Find ALL C and ASM files, ignoring hidden folders and the build dir.
 C_SOURCES   := $(shell find . -type f -name '*.c' -not -path "*/\.*" -not -path "*/python/*" -not -path "./$(BUILD_DIR)/*")
+CXX_SOURCES := $(shell find . -type f -name '*.cpp' -not -path "*/\.*" -not -path "*/python/*" -not -path "./$(BUILD_DIR)/*")
 ALL_ASM     := $(shell find . -type f -name '*.asm' -not -path "*/\.*" -not -path "*/python/*" -not -path "./$(BUILD_DIR)/*")
 
 # The Kernel ASM sources are ALL ASM files EXCEPT the flat binary bootloader stages.
@@ -37,6 +40,7 @@ ASM_SOURCES := $(filter-out $(BOOT_FLAT_SRCS), $(ALL_ASM))
 
 # Map sources to objects
 C_OBJS   := $(patsubst ./%.c, $(BUILD_DIR)/%.o, $(C_SOURCES))
+CXX_OBJS := $(patsubst ./%.cpp, $(BUILD_DIR)/%.o, $(CXX_SOURCES))
 ASM_OBJS := $(patsubst ./%.asm, $(BUILD_DIR)/%.o, $(ASM_SOURCES))
 OBJS     := $(C_OBJS) $(ASM_OBJS)
 
@@ -73,6 +77,25 @@ QEMU_FLAGS = -drive format=raw,file=$(IMAGE) -m 128M -d guest_errors -no-reboot 
 # ==============================================================================
 # Build Rules
 # ==============================================================================
+ifneq ($(filter test,$(MAKECMDGOALS)),)
+  # Define the specific file you want to run
+  TEST_FILE := test_cos.img
+  
+
+  # Overriding the default target so nothing else runs
+  .PHONY: test_runner
+  $(MAKECMDGOALS): test_runner
+	@:
+
+  test_runner:
+	@if [ -f "$(TEST_FILE)" ]; then \
+		echo "Running $(TEST_FILE)..."; \
+		$(QEMU) $(QEMU_FLAGS2); \
+	else \
+		echo "Test file '$(TEST_FILE)' not found. Skipping."; \
+	fi
+endif
+
 .PHONY: all clean run runclean debug_config
 
 all: $(IMAGE)
@@ -93,6 +116,10 @@ $(BUILD_DIR)/%.o: %.asm
 $(BUILD_DIR)/%.o: %.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/%.o: %.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 # 4. Link ELF Kernel
 # This rule is protected: It will cleanly fail if start.asm is missing!

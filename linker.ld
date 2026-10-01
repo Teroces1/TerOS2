@@ -1,26 +1,46 @@
 ENTRY(start)
 
-SECTIONS {
-    /* Tell the compiler your kernel starts exactly at 0x30000 */
-    . = 0x30000;
+/* Standard x86_64 higher-half base */
+KERNEL_VMA = 0xFFFFFFFF80000000;
+/* The physical address your bootloader actually loads the kernel at */
+KERNEL_LMA = 0x30000; 
 
-    .text :
+SECTIONS {
+    /* 
+     * The code expects to run at VMA + LMA. 
+     * e.g., 0xFFFFFFFF80030000 
+     */
+    . = KERNEL_VMA + KERNEL_LMA;
+
+    /* AT() ensures it goes into the flat binary at the physical offset, preventing huge file sizes */
+    .text : AT(ADDR(.text) - KERNEL_VMA)
     {
-        *(.start)         /* 1. Enforces start.asm entry executes first */
-        KEEP(*(.realmode)) /* 2. Keeps any realmode initialization tags packed tightly */
-        *(.text)          /* 3. Your compiled C code instructions */
+        *(.start)
+        KEEP(*(.realmode))
+        *(.text)
         *(.text.*)
-        *(.rodata)         /* 4. CRITICAL FIX: Strings packed right against code with NO gaps */
-        *(.rodata.*)
     }
 
-    .data :
+    .rodata : AT(ADDR(.rodata) - KERNEL_VMA)
+    {
+        *(.rodata)
+        *(.rodata.*)
+        
+        /* C++ Global Constructors */
+        . = ALIGN(8);
+        PROVIDE(__init_array_start = .);
+        KEEP(*(SORT(.init_array.*)))
+        KEEP(*(.init_array))
+        PROVIDE(__init_array_end = .);
+    }
+
+    .data : AT(ADDR(.data) - KERNEL_VMA)
     {
         *(.data)
         *(.data.*)
     }
 
-    .bss :
+    .bss : AT(ADDR(.bss) - KERNEL_VMA)
     {
         *(.bss)
         *(.bss.*)

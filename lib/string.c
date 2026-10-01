@@ -240,6 +240,18 @@ int STR_str2int(const char *str) {
     return num;
 }
 
+int STR_str2int_x16(const char *str) {
+    int num = 0;
+    const char *i = str;
+    while (*i != '\0' && ((*i >= '0' && *i <= '9') || (*i >= 'A' && *i <= 'F') || (*i >= 'a' && *i <= 'f'))) {
+        num *= 16;
+        num += *i >= 'a' ? ((*i - 'a' + 10)) : (*i >= 'A' ? ((*i - 'A' + 10)) : (*i - '0'));
+        i++;
+    }
+
+    return num;
+}
+
 char* STR_lpad(const char *str, char *buffer, int width, char padding) {
     int len = STR_strlen(str);
     int lenpadding = 0;

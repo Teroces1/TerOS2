@@ -8,8 +8,8 @@
 
 #define WIDTH 128
 #define HEIGHT 48
-#define TERMINAL_HEIGHT 256
-#define TERMINAL_ROTATE_MASK 0xFF
+#define TERMINAL_HEIGHT 512
+#define TERMINAL_ROTATE_MASK 0x1FF
 #define BOTTOM_PADDING 5    // leave 5 lines at the bottom clear
 #define BOTTOM_PADDING_WHEN_FOCUS 40    // always leave majority white space when CTRL+F
 #define MAX_COMMAND_LENGTH (WIDTH*4+2)
@@ -272,22 +272,34 @@ void EnterCommand() {
     runningCommandFlag = true;
 }
 
+
 void RunCommand() {
     // match and run command
     if (STR_strcmp(commandBuffer, "hello") == 0) {
         SHELL_Print("world\n");
     } else if (STR_strcmp(commandBuffer, "bootinfo") == 0) {
         DEBUG_print_entry();
-    } else if (STR_strcmp(commandBuffer, "cli") == 0) {
+    } else if (STR_strcmp(commandBuffer, "clear") == 0) {
         clear();
     } else if (STR_strcmp(commandBuffer, "help") == 0) {
         SHELL_Print(STR_CEncode(
             "  \\5yhello    \\5d- Returns 'world' for testing.\n"
             "  \\5ybootinfo \\5d- Prints most of the information in the entry packet.\n"
-            "  \\5ycli      \\5d- Clears the screen.\n"
+            "  \\5yclear    \\5d- Clears the screen.\n"
             "  \\5yhelp     \\5d- Prints out a list of commands.\n"
             "  \\5yvbe      \\5d- Prints out the VBE information.\n"
             "  \\5yvbemode [mode index] \\5d- Prints out the information on a given VBE mode. If no mode given, prints out a list of vbe modes.\n"
+            "  \5ygdtcheck \5d- Prints current values of all segment registers (CS, DS, SS, ES, FS, GS).\n"
+            "  \5ycregs    \5d- Dumps CPU control registers (CR0, CR2, CR3, CR4) to check paging state.\n"
+            "  \5ytables   \5d- Grabs the raw base physical addresses and limit sizes for both the GDT and IDT.\n"
+            "  \5yefercheck\5d- Decodes the Extended Feature Enable Register MSR to check 64-bit Long Mode flags.\n"
+            "  \5ymsr [msr id] \5d- Reads and displays the raw 64-bit value of any Model-Specific Register ID.\n"
+            "  \5ymdump [address] \5d- Displays a 64-byte hex and ASCII memory dump starting at the given physical address.\n"
+            "  \5ymdump4096 [address] \5d- memdump, but displays 4096 bytes across 256 lines\n"
+            "  \5yidtgat [vector] \5d- Parses and unpacks the 64-bit ISR handler address for a specific IDT interrupt vector.\n"
+            
+            
+            
         ));
     } else if (STR_strcmp(commandBuffer, "vbe") == 0) {
         DEBUG_print_VBE();
@@ -298,6 +310,43 @@ void RunCommand() {
         } else {
             DEBUG_print_modes();
         }        
+    } else if (STR_strcmp(commandBuffer, "gdtcheck") == 0) {
+        DEBUG_print_segment();
+    } else if (STR_strcmp(commandBuffer, "cregs") == 0) {
+        DEBUG_print_cregs();
+    } else if (STR_strcmp(commandBuffer, "tables") == 0) {
+        DEBUG_print_tables();
+    } else if (STR_strcmp(commandBuffer, "efercheck") == 0) {
+        DEBUG_print_efer();
+    } else if (STR_strncmp(commandBuffer, "msr", 3) == 0) {
+        if (commandBuffer[4] >= '0' && commandBuffer[4] <= '9') {
+            int arg = STR_str2int(commandBuffer+4);
+            DEBUG_print_msr(arg);
+        }
+    } else if (STR_strncmp(commandBuffer, "mdump 0x", 8) == 0) {
+        if ((commandBuffer[9] >= '0' && commandBuffer[8] <= '9') || (commandBuffer[9] >= 'a' && commandBuffer[9] <= 'f') || (commandBuffer[9] >= 'A' && commandBuffer[9] <= 'F')) {
+            int arg = STR_str2int_x16(commandBuffer+8);
+            DEBUG_print_memdump(arg, 16);
+        }
+    } else if (STR_strncmp(commandBuffer, "mdump4096 0x", 12) == 0) {
+        if ((commandBuffer[12] >= '0' && commandBuffer[12] <= '9') || (commandBuffer[9] >= 'a' && commandBuffer[9] <= 'f') || (commandBuffer[9] >= 'A' && commandBuffer[9] <= 'F')) {
+            int arg = STR_str2int_x16(commandBuffer+12);
+            DEBUG_print_memdump(arg, 256);
+        }
+    } else if (STR_strncmp(commandBuffer, "mdump", 5) == 0) {
+        if (commandBuffer[6] >= '0' && commandBuffer[6] <= '9') {
+            int arg = STR_str2int(commandBuffer+6);
+            DEBUG_print_memdump(arg, 16);
+        }
+    } else if (STR_strncmp(commandBuffer, "idtgat", 6) == 0) {
+        if (commandBuffer[7] >= '0' && commandBuffer[7] <= '9') {
+            int arg = STR_str2int(commandBuffer+7);
+            DEBUG_print_idt_gate(arg);
+        }
+    } else {
+        SHELL_Print("\5yUnrecognized command: '");
+        SHELL_Print(commandBuffer);
+        SHELL_Print("'.\n");
     }
 
 

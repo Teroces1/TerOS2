@@ -26,50 +26,50 @@ FrameBuffer: dd 0x0000
 
 
 
-void kernel_main(const EntryPacket* entryPacket, const VBEInfoBlock* vbe_info) {
-    VBE_framebuffer = 0x800000;//entryPacket->FrameBuffer;
-    VBE_bytesPerScanline = entryPacket->BytesPerScanline;
-    VBE_ClearFrontScreen(VBEC_BLACK); // Black background
+// void kernel_main(const EntryPacket* entryPacket, const VBEInfoBlock* vbe_info) {
+//     VBE_framebuffer = 0x800000;//entryPacket->FrameBuffer;
+//     VBE_bytesPerScanline = entryPacket->BytesPerScanline;
+//     VBE_ClearFrontScreen(VBEC_BLACK); // Black background
 
-    DEBUG_init(entryPacket, vbe_info);
-    WINDOW_Init();
+//     DEBUG_init(entryPacket, vbe_info);
+//     WINDOW_Init();
 
 
-    init_interrupts();
+//     init_interrupts();
 
-    // SHELL_Print("Hello World!");
-    WINDOW_Render();
+//     // SHELL_Print("Hello World!");
+//     WINDOW_Render();
 
     
 
-    // char digits[10];
+//     // char digits[10];
 
-    // STR_int2str(entryPacket->ModeIndexSelected, digits, 10);
+//     // STR_int2str(entryPacket->ModeIndexSelected, digits, 10);
 
-    // SHELL_Print(digits);
+//     // SHELL_Print(digits);
 
-    // VBE_PutString("Hello from 64-bit land!", 600, 410, VBEC_WHITE);
-    // VBE_PutString(digits, 600, 426, VBEC_WHITE);
+//     // VBE_PutString("Hello from 64-bit land!", 600, 410, VBEC_WHITE);
+//     // VBE_PutString(digits, 600, 426, VBEC_WHITE);
 
-    // VBE_SetPixel(0,0, VBEC_WHITE);
-    // VBE_SetPixel(512,384, VBEC_GREEN);
-    // VBE_SetPixel(1023,767, VBEC_YELLOW);
+//     // VBE_SetPixel(0,0, VBEC_WHITE);
+//     // VBE_SetPixel(512,384, VBEC_GREEN);
+//     // VBE_SetPixel(1023,767, VBEC_YELLOW);
 
-    // VBE_DrawRectangle(600, 400, 8, 8, VBEC_WHITE);
+//     // VBE_DrawRectangle(600, 400, 8, 8, VBEC_WHITE);
 
-    // VBE_DrawRectangle(610, 400, 8, 8, VBEC_PURPLE);
-    // VBE_DrawRectangle(620, 400, 8, 8, VBEC_WHITE);
+//     // VBE_DrawRectangle(610, 400, 8, 8, VBEC_PURPLE);
+//     // VBE_DrawRectangle(620, 400, 8, 8, VBEC_WHITE);
 
-    while (1) {
-        WINDOW_Render();
-    }
-
-
-    // VBE_PutString("Hello from 64-bit land!", 600, 410, VBEC_WHITE);
+//     while (1) {
+//         WINDOW_Render();
+//     }
 
 
+//     // VBE_PutString("Hello from 64-bit land!", 600, 410, VBEC_WHITE);
 
-    while (1) {
-        __asm__ volatile("hlt");
-    }
-}
+
+
+//     while (1) {
+//         __asm__ volatile("hlt");
+//     }
+// }

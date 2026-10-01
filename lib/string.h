@@ -32,6 +32,7 @@ char* STR_64int2str(int64_t value, char *buffer, const int64_t base);
 char* STR_CEncode(char* str);
 
 int STR_str2int(const char *str);
+int STR_str2int_x16(const char *str);
 
 char* STR_lpad(const char *str, char *buffer, int width, char padding);
 char* STR_rpad(const char *str, char *buffer, int width, char padding);

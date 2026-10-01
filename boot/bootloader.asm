@@ -8,7 +8,9 @@
 %define KERNEL_START 0x30000
 %define PML4_ADDR 0x20000
 %define PDPT_ADDR 0x21000
-%define PD_ADDR 0x22000
+%define HIGH_PDPT_ADDR 0x22000
+%define PD_ADDR 0x23000
+%define HIGH_PD_ADDR 0x24000
 
 [BITS 16]         ; We’re in 16-bit Real Mode
 
@@ -567,7 +569,7 @@ ProtectedModeStart:
 ; =====================================================================
     mov edi, PML4_ADDR     ; Clear starting from our hardcoded address
     xor eax, eax
-    mov ecx, 3072          ; 1024 dwords * 3 tables = 3072
+    mov ecx, 5120          ; 1024 dwords * 5 tables = 3072
     rep stosd
 
 ; =====================================================================
@@ -580,6 +582,14 @@ ProtectedModeStart:
     mov eax, PD_ADDR
     or eax, 0x03
     mov [PDPT_ADDR], eax   ; Set first entry of PDPT to point to PD
+
+    mov eax, HIGH_PDPT_ADDR
+    or eax, 0x03
+    mov [PML4_ADDR + 511*8], eax   ; Set first entry of PML4 to point to PDPT
+
+    mov eax, HIGH_PD_ADDR
+    or eax, 0x03
+    mov [HIGH_PDPT_ADDR + 511*8], eax   ; Set first entry of PDPT to point to PD
 
 ; =====================================================================
 ; STEP 3: Identity Map the first 2MB using a Huge Page
@@ -615,6 +625,10 @@ ProtectedModeStart:
     add eax, 0x200000
     or eax, 0x83
     mov [PD_ADDR+40], eax
+
+
+    mov eax, 0x00000083       ; Physical address 0 mapped to high virtual address
+    mov [HIGH_PD_ADDR + (510 * 8)], eax  ; Adjust index based on where your higher-half maps
     
 ; =====================================================================
 ; STEP 4: Tell the CPU where the top-level PML4 table is
