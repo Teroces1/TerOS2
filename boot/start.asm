@@ -4,18 +4,58 @@
 
 [EXTERN __init_array_start]
 [EXTERN __init_array_end]
+[EXTERN _kernel_load_size]
+[EXTERN _kernel_load_end]
+[EXTERN _kernel_end]
+; [EXTERN initial_stack_top]
 
 section .start
-
 start:
+    mov r14, rdi
+    mov r15, rsi
+    
+    mov rsi, 0x30000        ; Source: low memory buffer
+    mov rdi, 0x100000       ; Destination: 1 MB mark
+
+    ; Load the byte size directly from the linker symbol
+    mov rax, _kernel_load_size
+
+    ; Convert byte count to 32-bit DWORD count (rounded up)
+    add rax, 3
+    shr rax, 2
+    mov rcx, rax            ; RCX = number of DWORDs to copy
+
+    cld
+    rep movsd               ; Copy RCX dwords from [RSI] to [RDI]
+
+
+    
+    ; and now clear the bss section
+    mov rdi, 0x100000
+    add rdi, _kernel_load_size ; RDI = start of .bss at 1 MB mark
+
+    mov rax, _kernel_end
+    mov rbx, _kernel_load_end
+    sub rax, rbx
+    mov rcx, rax
+    
+    add rcx, 3
+    shr rcx, 2                 ; Convert to dwords
+
+    xor eax, eax               ; Fill with 0
+    rep stosd
+
+
+    mov rax, relocatedStart
+    jmp rax
+relocatedStart:
     ; call c++ constructors
-    push rdi
-    push rsi
-    push r12
-    mov r12, __init_array_start
+    mov rsp, kernel_stack_top
+    mov r12, qword __init_array_start
 
 .call_constructors:
-    cmp r12, __init_array_end
+    mov r13, qword __init_array_end
+    cmp r12, r13
     je .call_constructors_end
 
     call [r12]
@@ -23,11 +63,17 @@ start:
     jmp .call_constructors
 
 .call_constructors_end:
-    pop r12
-    pop rsi
-    pop rdi
+    mov rdi, r14
+    mov rsi, r15
     call kernel_main
 .hang:
     cli
     hlt
     jmp .hang
+
+
+section .bss
+align 16
+kernel_stack_bottom:
+    resb 16384          ; Allocate 16 KiB of uninitialized bytes
+kernel_stack_top:

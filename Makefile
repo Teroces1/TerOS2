@@ -14,8 +14,8 @@ AS      = nasm
 
 # --- Compiler / Linker Flags ---
 # Swap -m32 to -m64 for Long Mode (and add -mno-red-zone -mgeneral-regs-only)
-CFLAGS  = -ffreestanding -m64 -O3 -Wall -Wextra -MMD -MP  -fno-pic -fno-pie -fno-plt -fno-stack-protector -mno-red-zone -mgeneral-regs-only -mcmodel=kernel
-CXXFLAGS = $(CFLAGS) -fno-exceptions -fno-rtti -Wall -Wextra
+CFLAGS  = -ffreestanding -m64 -O0 -Wall -Wextra -MMD -MP  -fno-pic -fno-pie -fno-plt -fno-stack-protector -mno-red-zone -mgeneral-regs-only -mcmodel=kernel
+CXXFLAGS = $(CFLAGS) -fno-exceptions -fno-rtti -Wall -Wextra -mpopcnt# -march=x86-64-v2 
 # Swap elf_i386 to elf_x86_64 for Long Mode
 LDFLAGS = -T linker.ld -m elf_x86_64 -z noexecstack --no-warn-rwx-segments
 
@@ -158,7 +158,7 @@ $(IMAGE): $(IMAGE_DEPS)
 # 	fi
 	@if [ -f $(BUILD_DIR)/kernel.bin ]; then \
 		echo " -> Injecting Kernel (Sector 5)..."; \
-		dd if=$(BUILD_DIR)/kernel.bin of=$(IMAGE) bs=512 seek=9 conv=notrunc status=none; \
+		dd if=$(BUILD_DIR)/kernel.bin of=$(IMAGE) bs=512 seek=10 conv=notrunc status=none; \
 	fi
 	@echo "OS Image built successfully!"
 

@@ -3,10 +3,12 @@
 ; ---------------------------
 
 %define NUM_SECTORS 80
-%define KERNEL_SECTOR 9
-%define BOOT_SETTINGS_SECTOR 8
+%define KERNEL_SECTOR 10
+%define BOOT_SETTINGS_SECTOR 9
 %define KERNEL_START_SEGMENT 0x3000
 %define KERNEL_START 0x30000
+%define KERNEL_COPIED_START 0x100000
+%define KERNEL_VIRTUAL_START 0xFFFFFFFF80000000
 %define PML4_ADDR 0x20000
 %define PDPT_ADDR 0x21000
 %define HIGH_PDPT_ADDR 0x22000
@@ -158,7 +160,7 @@ Stage2_Start:
     ; first get current tick
     mov ah, 0x00
     int 0x1A    ; cx = high, dx = low, al = midnight rollover flag
-    add dx, 45   ; 1 sec ~ 18.2 ticks, so 2.5 sec = 45
+    add dx, 25   ; 1 sec ~ 18.2 ticks, so 2.5 sec = 45
 
     push dx
 .waiting_loop:
@@ -697,6 +699,7 @@ BaseMemoryKB: dw 0
 DriveHeads:   db 0
 DriveSectors: db 0
 CPUFeatures: dd 0
+CPUExtendedFeatures: dd 0
 E820Count:      dw 0
 E820Map:        times 24 * 32 db 0  ; 32 entries, 24 bytes each
 
@@ -956,6 +959,31 @@ switchToProtectedMode:
     cpuid
     mov [CPUFeatures], edx  ; EDX contains the feature flags
 
+; ;TODO:
+; unlock_extended_cpuid:
+;     mov ecx, 0x1A6          ; IA32_MISC_ENABLE MSR address
+;     rdmsr                   ; Read MSR into EDX:EAX
+    
+;     test eax, (1 << 22)     ; Check bit 22 (Limit CPUID Maxval)
+;     jz .already_unlocked    ; If it's already 0, do nothing
+
+;     and eax, ~(1 << 22)     ; Clear bit 22 to unlock extended functions
+;     wrmsr                   ; Write the updated value back to the MSR
+
+; .already_unlocked:
+
+;     ; check if 1gb tables are supported or not
+;     mov eax, 0x80000000
+;     cpuid
+;     cmp eax, 0x80000001
+;     jb .gbpages_notsupported
+    
+;     mov eax, 0x80000001
+;     cpuid
+;     mov [CPUExtendedFeatures], edx
+
+; .gbpages_notsupported:
+
     int 0x12
     mov [BaseMemoryKB], ax
 
@@ -971,6 +999,7 @@ switchToProtectedMode:
     jmp 0x08:ProtectedModeStart
 
 [BITS 32]
+
 ProtectedModeStart:
     cli
     cld
@@ -1007,7 +1036,7 @@ ProtectedModeStart:
 
     mov eax, HIGH_PD_ADDR
     or eax, 0x03
-    mov [HIGH_PDPT_ADDR + 511*8], eax   ; Set first entry of PDPT to point to PD
+    mov [HIGH_PDPT_ADDR + 510*8], eax   ; Set first entry of PDPT to point to PD
 
 ; =====================================================================
 ; STEP 3: Identity Map the first 2MB using a Huge Page
@@ -1047,7 +1076,8 @@ ProtectedModeStart:
 
 
     mov eax, 0x00000083       ; Physical address 0 mapped to high virtual address
-    mov [HIGH_PD_ADDR + (510 * 8)], eax  ; Adjust index based on where your higher-half maps
+    ; add eax, KERNEL_COPIED_START
+    mov [HIGH_PD_ADDR + (0 * 8)], eax  ; Adjust index based on where your higher-half maps
     
 ; =====================================================================
 ; STEP 4: Tell the CPU where the top-level PML4 table is
@@ -1106,4 +1136,4 @@ init_long_mode:
 
 
 
-times 3584 - ($ - $$) db 0
+times 4096 - ($ - $$) db 0
