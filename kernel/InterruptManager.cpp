@@ -78,13 +78,12 @@ namespace INT {
             interruptHandlers[regs->int_no](regs);
         } else if ((regs->int_no < 32 || regs->int_no >= 48) && fallbackHandler != nullptr) {
             fallbackHandler(regs);
-            if (regs->int_no < 32) {
-                // cpu exception
-                while (1) __asm__ volatile("hlt");
-            }
         }
 
-        
+        if (regs->int_no < 32) {
+            // cpu exception
+            while (1) __asm__ volatile("hlt");
+        }
 
         if (regs->int_no >= 32 && regs->int_no <= 47) {
             if (regs->int_no == 33) {

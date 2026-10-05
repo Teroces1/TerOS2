@@ -192,9 +192,9 @@ extern "C" void kernel_main(const EntryTypes::EntryPacket* entryPacket, const En
     intMgr.enableInterrupts();
 
     // -- should trigger divide by 0
-    int test = 5;
-    int test2 = 0;
-    int test3 = test / test2;
+    // int test = 5;
+    // int test2 = 0;
+    // int test3 = test / test2;
 
     int count = 0;
     mainDisplay.ClearFront();
@@ -203,7 +203,7 @@ extern "C" void kernel_main(const EntryTypes::EntryPacket* entryPacket, const En
 
     // will allocate memory forever, and attempt to write to it. at some point, memory will run out, kmalloc will return nullptr, and writing to it will cause page fault
     while (1) {
-        uint8_t *ptr = reinterpret_cast<uint8_t*>(memMgr.kmalloc(1500));
+        uint8_t *ptr = reinterpret_cast<uint8_t*>(memMgr.kmalloc(2500));
         // if (count %50 == 0)
             mainDisplay.testPrint("heap  used RAM: ", memMgr.GetOccupiedRamAmount() - memMgr.otherReservedRAM, 10);
         if (count %2000 != 0)
