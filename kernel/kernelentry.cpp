@@ -56,31 +56,38 @@ void CPU_EXCEPTION(INT::Registers *regs) {
     const VBE::Color color = display.GetRGB(255,255,255);
 
     display.ClearFront(back);
-    display.PutStringFront("=== CPU EXCEPTION ===", 0, 0, color, back);
+    display.PutStringFront(":(", 16, 0, 0, color, back);
+
+    display.PutStringFront("=== CPU EXCEPTION ===", 0, 256, color, back);
     
     // Print the human-readable error!
     if (regs->int_no < 32) {
-        display.PutStringFront(ExceptionMessages[regs->int_no], 0, 16, color, back);
+        display.PutStringFront(ExceptionMessages[regs->int_no], 0, 272, color, back);
     } else {
-        display.PutStringFront("Unknown Exception", 0, 16, color, back);
+        display.PutStringFront("Unknown Exception", 0, 272, color, back);
     }
 
-    display.PutStringFront("Interrupt Number: ", 0, 32, color, back);
-    display.PutULLFront(regs->int_no, 10, 18*8, 32, color, back);
+    display.PutStringFront("Interrupt Number: ", 0, 288, color, back);
+    display.PutULLFront(regs->int_no, 10, 18*8, 288, color, back);
 
     // If it's a Page Fault (14), print CR2
     if (regs->int_no == 14) {
         uint64_t faulting_address;
         __asm__ volatile("mov %%cr2, %0" : "=r" (faulting_address));
         
-        display.PutStringFront("Faulting Address: 0x", 0, 48, color, back);
-        display.PutULLFront(faulting_address, 16, 20*8, 48, color, back);
+        display.PutStringFront("Faulting Address: 0x", 0, 320, color, back);
+        display.PutULLFront(faulting_address, 16, 20*8, 320, color, back);
     }
 
     // Print Instruction Pointer to know WHERE it crashed
-    display.PutStringFront("Instruction Pointer (RIP): 0x", 0, 64, color, back);
-    display.PutULLFront(regs->rip, 16, 29*8, 64, color, back);
+    display.PutStringFront("Instruction Pointer (RIP): 0x", 0, 336, color, back);
+    display.PutULLFront(regs->rip, 16, 29*8, 336, color, back);
+
+
 }
+
+
+
 
 
 extern "C" void kernel_main(const EntryTypes::EntryPacket* entryPacket, const EntryTypes::VBEInfoBlock* vbe_info) {
@@ -175,18 +182,40 @@ extern "C" void kernel_main(const EntryTypes::EntryPacket* entryPacket, const En
     mainDisplay.testPrint("Heap Size: ", heapData.TotalCapacity, 10);
     mainDisplay.testPrint("Heap Used: ", heapData.TotalUsed, 10);
     mainDisplay.testPrint("Num Blocks: ", heapData.TotalBlocks, 10);
-    
+        
 
     INT::InterruptManager intMgr;
+    intMgr.RegisterFallbackHandler(CPU_EXCEPTION);
+    for (uint8_t i = 0; i < 32; i++) {
+        intMgr.RegisterHandler(i, CPU_EXCEPTION);
+    }
+    intMgr.enableInterrupts();
 
     // -- should trigger divide by 0
-    // int test = 5;
-    // int test2 = 0;
-    // int test3 = test / test2;
+    int test = 5;
+    int test2 = 0;
+    int test3 = test / test2;
+
+    int count = 0;
+    mainDisplay.ClearFront();
+    mainDisplay.testPrintLine = 0;
+
+
+    // will allocate memory forever, and attempt to write to it. at some point, memory will run out, kmalloc will return nullptr, and writing to it will cause page fault
+    while (1) {
+        uint8_t *ptr = reinterpret_cast<uint8_t*>(memMgr.kmalloc(1500));
+        // if (count %50 == 0)
+            mainDisplay.testPrint("heap  used RAM: ", memMgr.GetOccupiedRamAmount() - memMgr.otherReservedRAM, 10);
+        if (count %2000 != 0)
+            mainDisplay.testPrintLine --;
+        *ptr = 3;
+        
+        count++;
+    }
 
     // -- should trigger page fault
-    uint64_t testAddr = 0x5238;
-    *reinterpret_cast<uint8_t *>(testAddr) = 5;
+    // uint64_t testAddr = 0x5238;
+    // *reinterpret_cast<uint8_t *>(testAddr) = 5;
 
 
     while (1) {

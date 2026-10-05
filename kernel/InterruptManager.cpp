@@ -8,8 +8,6 @@ extern "C" {
 }
 
 
-extern void CPU_EXCEPTION(INT::Registers *regs);
-
 
 namespace GDT {
     static GdtEntry gdt[5] __attribute__((aligned(16)));
@@ -58,6 +56,9 @@ namespace INT {
     static IdtEntry idt[256] __attribute__((aligned(16)));
     static IdtPtr idtPtr;
 
+    static InterruptHandler interruptHandlers[256];
+    static InterruptHandler fallbackHandler;
+
     InterruptManager* InterruptManager::Instance = nullptr;
 
     static void idtSetGate(uint8_t num, uint64_t base, uint16_t sel, uint8_t flags) {
@@ -73,11 +74,17 @@ namespace INT {
 
 
     extern "C" void interruptHandler(Registers *regs) {
-        if (regs->int_no < 32) {
-            // cpu exception
-            CPU_EXCEPTION(regs);
-            while (1) __asm__ volatile("hlt");
+        if (interruptHandlers[regs->int_no] != nullptr) {
+            interruptHandlers[regs->int_no](regs);
+        } else if ((regs->int_no < 32 || regs->int_no >= 48) && fallbackHandler != nullptr) {
+            fallbackHandler(regs);
+            if (regs->int_no < 32) {
+                // cpu exception
+                while (1) __asm__ volatile("hlt");
+            }
         }
+
+        
 
         if (regs->int_no >= 32 && regs->int_no <= 47) {
             if (regs->int_no == 33) {
@@ -107,15 +114,46 @@ namespace INT {
 
         idtSetGate(0 , reinterpret_cast<uint64_t>(_isr0 ), 0x08, 0x8E);
         idtSetGate(1 , reinterpret_cast<uint64_t>(_isr1 ), 0x08, 0x8E);
+        idtSetGate(2 , reinterpret_cast<uint64_t>(_isr2 ), 0x08, 0x8E);
+        idtSetGate(3 , reinterpret_cast<uint64_t>(_isr3 ), 0x08, 0x8E);
+        idtSetGate(4 , reinterpret_cast<uint64_t>(_isr4 ), 0x08, 0x8E);
+        idtSetGate(5 , reinterpret_cast<uint64_t>(_isr5 ), 0x08, 0x8E);
+        idtSetGate(6 , reinterpret_cast<uint64_t>(_isr6 ), 0x08, 0x8E);
+        idtSetGate(7 , reinterpret_cast<uint64_t>(_isr7 ), 0x08, 0x8E);
         idtSetGate(8 , reinterpret_cast<uint64_t>(_isr8 ), 0x08, 0x8E);
+        idtSetGate(9 , reinterpret_cast<uint64_t>(_isr9 ), 0x08, 0x8E);
+        idtSetGate(10, reinterpret_cast<uint64_t>(_isr10), 0x08, 0x8E);
+        idtSetGate(11, reinterpret_cast<uint64_t>(_isr11), 0x08, 0x8E);
+        idtSetGate(12, reinterpret_cast<uint64_t>(_isr12), 0x08, 0x8E);
         idtSetGate(13, reinterpret_cast<uint64_t>(_isr13), 0x08, 0x8E);
-        idtSetGate(14, reinterpret_cast<uint64_t>(_isr14), 0x08, 0x8E)  ;
+        idtSetGate(14, reinterpret_cast<uint64_t>(_isr14), 0x08, 0x8E);
+        idtSetGate(15, reinterpret_cast<uint64_t>(_isr15), 0x08, 0x8E);
+        idtSetGate(16, reinterpret_cast<uint64_t>(_isr16), 0x08, 0x8E);
+        idtSetGate(17 , reinterpret_cast<uint64_t>(_isr17), 0x08, 0x8E);
+        idtSetGate(18, reinterpret_cast<uint64_t>(_isr18), 0x08, 0x8E);
+        idtSetGate(19, reinterpret_cast<uint64_t>(_isr19), 0x08, 0x8E);
+        idtSetGate(20, reinterpret_cast<uint64_t>(_isr20), 0x08, 0x8E);
+        idtSetGate(21, reinterpret_cast<uint64_t>(_isr21), 0x08, 0x8E);
+        idtSetGate(22, reinterpret_cast<uint64_t>(_isr22), 0x08, 0x8E);
+        idtSetGate(23, reinterpret_cast<uint64_t>(_isr23), 0x08, 0x8E);
+        idtSetGate(24, reinterpret_cast<uint64_t>(_isr24), 0x08, 0x8E);
+        idtSetGate(25, reinterpret_cast<uint64_t>(_isr25), 0x08, 0x8E);
+        idtSetGate(26, reinterpret_cast<uint64_t>(_isr26), 0x08, 0x8E);
+        idtSetGate(27, reinterpret_cast<uint64_t>(_isr27), 0x08, 0x8E);
+        idtSetGate(28, reinterpret_cast<uint64_t>(_isr28), 0x08, 0x8E);
+        idtSetGate(29, reinterpret_cast<uint64_t>(_isr29), 0x08, 0x8E);
+        idtSetGate(30, reinterpret_cast<uint64_t>(_isr30), 0x08, 0x8E);
+        idtSetGate(31, reinterpret_cast<uint64_t>(_isr31), 0x08, 0x8E);
         idtSetGate(32, reinterpret_cast<uint64_t>(_isr32), 0x08, 0x8E);
         idtSetGate(33, reinterpret_cast<uint64_t>(_isr33), 0x08, 0x8E);
 
         asm volatile ("lidt %0" : : "m"(idtPtr));
+    }
+
+    void InterruptManager::enableInterrupts() {
         asm volatile ("sti");
     }
+
 
 
     void InterruptManager::remapPIC() {
@@ -140,5 +178,13 @@ namespace INT {
 
         outb(PIC1_DATA, a1);
         outb(PIC2_DATA, a2);
+    }
+
+    void InterruptManager::RegisterHandler(uint8_t handlerIndex, InterruptHandler handler) {
+        interruptHandlers[handlerIndex] = handler;
+    }
+
+    void InterruptManager::RegisterFallbackHandler(InterruptHandler handler) {
+        fallbackHandler = handler;
     }
 }

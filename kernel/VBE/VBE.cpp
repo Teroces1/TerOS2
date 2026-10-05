@@ -63,7 +63,7 @@ void Display::DrawRectangleFront(int x, int y, int w, int h, Color color) {
     }
 }
 
-void Display::PutCharFront(char c, int x, int y, Color color, Color backColor) {
+void Display::PutCharFront(char c, int size, int x, int y, Color color, Color backColor) {
     unsigned int charIndex = static_cast<unsigned char>(c);
     if (charIndex >= 128) charIndex = ' ';
 
@@ -71,23 +71,43 @@ void Display::PutCharFront(char c, int x, int y, Color color, Color backColor) {
 
     if (BPP == 32) {
         volatile uint32_t* raw_fb = reinterpret_cast<volatile uint32_t*>(FrameBuffer);
-        for (int row = 0; row < 16; row++) {
-            int buffrow = (row + y)*_pixelsPerScanLine;
-            for (int col = 0; col < 8; col++) {
-                if ((map[row] & (0x80 >> col)) > 0) {
-                    raw_fb[buffrow + col + x] = color;
-                } else {
-                    raw_fb[buffrow + col + x] = backColor;
+
+        if (size == 1) {
+            for (int row = 0; row < 16; row++) {
+                int buffrow = (row + y)*_pixelsPerScanLine;
+                for (int col = 0; col < 8; col++) {
+                    if ((map[row] & (0x80 >> col)) > 0) {
+                        raw_fb[buffrow + col + x] = color;
+                    } else {
+                        raw_fb[buffrow + col + x] = backColor;
+                    }
+                }
+            }
+        } else {
+            for (int row = 0; row < 16; row++) {
+                for (int realRow = row*size; realRow <size*(row+1); realRow++) {
+                    int buffrow = (realRow + y)*_pixelsPerScanLine;
+                    for (int col = 0; col < 8; col++) {
+                        if ((map[row] & (0x80 >> col)) > 0) {
+                            for (int realCol = size*col; realCol < size*(col+1); realCol++) {
+                                raw_fb[buffrow + realCol + x] = color;
+                            }
+                        } else {
+                            for (int realCol = size*col; realCol < size*(col+1); realCol++) {
+                                raw_fb[buffrow + realCol + x] = backColor;
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 }
 
-void Display::PutStringFront(const char *c, int x, int y, Color color, Color backColor) {
+void Display::PutStringFront(const char *c, int size, int x, int y, Color color, Color backColor) {
     int i = 0;
     while (c[i] != '\0') {
-        PutCharFront(c[i], x + i*8, y, color, backColor);
+        PutCharFront(c[i], size, x + i*8*size, y, color, backColor);
         i++;
     }
 }

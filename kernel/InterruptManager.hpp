@@ -71,19 +71,43 @@ namespace INT {
     
 
     extern "C" {
-        extern void _isr0(void);     // divide error
+        extern void _isr0(void);     // divide by zero
         extern void _isr1(void);     // debug
+        extern void _isr2(void);     // non maskable interrupt
         extern void _isr3(void);     // breakpoint (__asm__ volatile("int $3");)
+        extern void _isr4(void);     // bound ragne exceeded
+        extern void _isr5(void);     // overflow
         extern void _isr6(void);     // invalid opcode
+        extern void _isr7(void);     // device not available
         extern void _isr8(void);     // double fault
-        extern void _isr8(void);     // double fault
-        extern void _isr8(void);     // double fault
-        extern void _isr8(void);     // double fault
+        extern void _isr9(void);     // coprocessor segment overrun (legacy)
+        extern void _isr10(void);    // invalid tss
+        extern void _isr11(void);    // segment not present
+        extern void _isr12(void);    // stack segment fault
         extern void _isr13(void);    // general protection fault
         extern void _isr14(void);    // page fault
+        extern void _isr15(void);    // reserved
+        extern void _isr16(void);    // x87 floating point exception
+        extern void _isr17(void);    // alignment check
+        extern void _isr18(void);    // machine check
+        extern void _isr19(void);    // simd floating point exception
+        extern void _isr20(void);    // virtualization exception
+        extern void _isr21(void);    // reserved
+        extern void _isr22(void);    // reserved
+        extern void _isr23(void);    // reserved
+        extern void _isr24(void);    // reserved
+        extern void _isr25(void);    // reserved
+        extern void _isr26(void);    // reserved
+        extern void _isr27(void);    // reserved
+        extern void _isr28(void);    // reserved
+        extern void _isr29(void);    // reserved
+        extern void _isr30(void);    // security execption
+        extern void _isr31(void);    // reserved
         extern void _isr32(void);    // timer
         extern void _isr33(void);    // keyboard
     }
+
+    using InterruptHandler = void (*)(Registers*);
 
     extern "C" void interruptHandler(Registers *regs);
 
@@ -95,10 +119,17 @@ namespace INT {
             return *Instance;
         }
 
+        void enableInterrupts();
+
+        void RegisterHandler(uint8_t handlerIndex, InterruptHandler handler);
+
+        void RegisterFallbackHandler(InterruptHandler handler);
+
     private:
         static InterruptManager *Instance;
 
         void remapPIC();
+
     };
 }
 

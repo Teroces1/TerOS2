@@ -38,21 +38,28 @@ namespace VBE {
 
         void PutPixelFront(int x, int y, Color color);
         void DrawRectangleFront(int x, int y, int w, int h, Color color);
-        void PutCharFront(char c, int x, int y, Color color, Color backColor);
+        void PutCharFront(char c, int size, int x, int y, Color color, Color backColor);
+        inline void PutCharFront(char c, int x, int y, Color color, Color backColor) {
+            PutCharFront(c, 1, x, y, color, backColor);
+        }
         inline void PutCharFront(char c, int x, int y, Color color) {
-            PutCharFront(c, x, y, color, 0);
+            PutCharFront(c, 1, x, y, color, 0);
         }
         inline void PutCharFront(char c, int x, int y) {
-            PutCharFront(c, x, y, 0xFFFFFFFF, 0);
+            PutCharFront(c, 1, x, y, 0xFFFFFFFF, 0);
         }
 
-        void PutStringFront(const char *c, int x, int y, Color color, Color backColor);
+        void PutStringFront(const char *c, int size, int x, int y, Color color, Color backColor);
+        inline void PutStringFront(const char *c, int x, int y, Color color, Color backColor) {
+            PutStringFront(c, 1, x, y, color, backColor);
+        }
         inline void PutStringFront(const char *c, int x, int y, Color color) {
-            PutStringFront(c, x, y, color, 0);
+            PutStringFront(c, 1, x, y, color, 0);
         }
         inline void PutStringFront(const char *c, int x, int y) {
-            PutStringFront(c, x, y, 0xFFFFFFFF, 0);
+            PutStringFront(c, 1, x, y, 0xFFFFFFFF, 0);
         }
+
 
         void PutULLFront(uint64_t num, uint64_t base, int x, int y, Color color, Color backColor);
 
@@ -72,6 +79,7 @@ namespace VBE {
             PutStringFront(c, 16, (testPrintLine++)*16);
         }
 
+        int testPrintLine = 5;
     private:
         volatile uint8_t *FrameBuffer;
         const int BytesPerScanLine;
@@ -88,7 +96,6 @@ namespace VBE {
 
         char* STR_64int2str(uint64_t value, char *buffer, const uint64_t base);
 
-        int testPrintLine = 5;
     };
 }
 
