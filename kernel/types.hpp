@@ -15,6 +15,30 @@ namespace Kernel {
             uint32_t ACPI_Extended_Attributes;
         };
 
+        struct ModeInfo {
+            uint32_t HorizontalResolution;
+            uint32_t VerticalResolution;
+            uint32_t PixelFormat;
+            uint32_t PixelsPerScanLine;
+            uint8_t Available;
+        };
+
+
+        struct __attribute__((packed)) KernelEntryPacket {
+            uint64_t FrameBufferBase;
+            uint64_t FrameBufferSize;
+
+            uint32_t NumModes;
+            uint32_t ModeSelected;
+            ModeInfo *ModeTablePtr;
+
+            uint64_t MemoryMapBase;
+            uint64_t MemoryMapSize;
+            uint64_t DescriptorSize;
+            uint32_t DescriptorVersion;
+
+        };
+
 
         struct __attribute__((packed)) EntryPacket {
             uint8_t BootDrive;
