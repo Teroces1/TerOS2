@@ -36,9 +36,10 @@ const EFI_PHYSICAL_ADDRESS KernelAddress = (EFI_PHYSICAL_ADDRESS) 0x100000;
 EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     InitializeLib(ImageHandle, SystemTable);
 
-    *((volatile UINT64 *)(0xF8473FF0392384)) = 34; // shouldnt this make it crash?
+
     Print(L"UEFI has finished laoding... Bootloader starting...\r\n");
-    while (1) __asm__ volatile("hlt");
+
+    
 
     EFI_STATUS status;
     EFI_LOADED_IMAGE_PROTOCOL *loadedImage = NULL;
@@ -82,6 +83,8 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
 
     FreePool(kernelFileInfo);   // unallocate the mem again
 
+    
+
     status = uefi_call_wrapper(BS->AllocatePages, 4, AllocateAddress, EfiLoaderData, numPages, &KernelAddress);
     if (EFI_ERROR(status)) {
         Print(L"Error while allocating space for kernel.elf!\r\n");
@@ -96,37 +99,6 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
         stall();
     }
 
-    // now generate the new page tables for 0xFFFFFFFF80000000
-
-    // we need 1 pml4, 2 pdpt, 3 pd
-    EFI_PHYSICAL_ADDRESS tablesAddress = 0x9FFFFF;
-    status = uefi_call_wrapper(BS->AllocatePages, 4, AllocateMaxAddress, EfiRuntimeServicesData, 6, &tablesAddress);
-
-    
-    if (EFI_ERROR(status)) {
-        Print(L"Error while allocating space for page tables!\r\n");
-        stall();
-    }
-
-    
-    page_table_t *pageTables = (page_table_t*) tablesAddress;
-
-    pageTables[0][511] = ((UINT64) &(pageTables[1])) | 0x3;
-    pageTables[1][510] = ((UINT64) &(pageTables[2])) | 0x3;
-    pageTables[1][511] = ((UINT64) &(pageTables[3])) | 0x3;
-
-    pageTables[0][0]   = ((UINT64) &(pageTables[4])) | 0x3;
-    pageTables[4][0]   = ((UINT64) &(pageTables[5])) | 0x3;
-
-    for (int i = 0; i < 512; i++) {
-        pageTables[2][i] = (0x200000ull * i) | 0x83;    // massive page, read+write
-    }
-    for (int i = 0; i < 512; i++) {
-        pageTables[3][i] = (0x40000000 + 0x200000ull * i) | 0x83;    // massive page, read+write
-    }
-    for (int i = 0; i < 512; i++) { // also make sure first gb is also identity mapped
-        pageTables[5][i] = (0x200000ull * i) | 0x83;    // massive page, read+write
-    }
 
     // locate GOP, load mode
     EFI_GRAPHICS_OUTPUT_PROTOCOL *gop;
@@ -170,7 +142,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
 
 
         if (modeInfo->HorizontalResolution == 1920 && modeInfo->VerticalResolution == 1080 &&
-            (modeInfo->PixelFormat == PixelRedGreenBlueReserved8BitPerColor ||
+            (/*modeInfo->PixelFormat == PixelRedGreenBlueReserved8BitPerColor ||*/
              modeInfo->PixelFormat == PixelBlueGreenRedReserved8BitPerColor)) {
             status = uefi_call_wrapper(gop->SetMode, 2, gop, mode);
             if (EFI_ERROR(status)) {
@@ -182,6 +154,58 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
         }
 
         FreePool(modeInfo);
+    }
+
+    if (!modeWasEnabled) {
+        Print(L"Error while finding GOP mode 1920x1080 @32BPP, RGB!\r\n");
+        stall();
+    }
+
+    // now generate the new page tables for 0xFFFFFFFF80000000
+
+    // we need 1 pml4, 2 pdpt, 3 pd
+    EFI_PHYSICAL_ADDRESS tablesAddress = 0x9FFFFF;
+    status = uefi_call_wrapper(BS->AllocatePages, 4, AllocateMaxAddress, EfiRuntimeServicesData, 6+16, &tablesAddress);
+
+    
+    if (EFI_ERROR(status)) {
+        Print(L"Error while allocating space for page tables!\r\n");
+        stall();
+    }
+
+    
+    page_table_t *pageTables = (page_table_t*) tablesAddress;
+
+    for (int i = 0; i < (6+16) * 512; i++) {
+        ((UINT64*)pageTables)[i] = 0;
+    }
+
+    pageTables[0][511] = ((UINT64) &(pageTables[1])) | 0x3;
+    pageTables[1][510] = ((UINT64) &(pageTables[2])) | 0x3;
+    pageTables[1][511] = ((UINT64) &(pageTables[3])) | 0x3;
+    pageTables[1][0]   = ((UINT64) &(pageTables[4])) | 0x3;
+
+    pageTables[0][0]   = ((UINT64) &(pageTables[5])) | 0x3;
+    for (int tab = 6; tab < 6+16; tab++) {
+        pageTables[5][tab-6]   = ((UINT64) &(pageTables[tab])) | 0x3;
+    }
+
+    for (int i = 0; i < 512; i++) {
+        pageTables[2][i] = (0x200000ull * i) | 0x83;    // massive page, read+write
+    }
+    for (int i = 0; i < 512; i++) {
+        pageTables[3][i] = (0x40000000 + 0x200000ull * i) | 0x83;    // massive page, read+write
+    }
+    for (int tab = 6; tab < 6+16; tab++) {
+        UINT64 gbOffset = (UINT64)(tab - 6) * 0x40000000ull;
+        for (int i = 0; i < 512; i++) { // also make sure first gb is also identity mapped
+            pageTables[tab][i] = (gbOffset + (0x200000ull * i)) | 0x83;    // massive page, read+write
+        }
+    }
+
+    UINT64 videoBufferStartPage = gop->Mode->FrameBufferBase & ~0x1FFFFFull;
+    for (int i = 0; i < 512; i++) {
+        pageTables[4][i] = (videoBufferStartPage + 0x200000ull * i) | 0x83;    // massive page, read+write
     }
 
     // get memory map
@@ -219,6 +243,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     entryPacket->NumModes          = gop->Mode->MaxMode;
     entryPacket->ModeTablePtr      = modeInfoTable;
 
+    
     status = uefi_call_wrapper(BS->GetMemoryMap, 5, &memoryMapSize, memoryMap, &mapKey, &descriptorSize, &descriptorVersion);
     if (EFI_ERROR(status)) {
         Print(L"Error getting memory map (final call)!\r\n");
@@ -230,21 +255,24 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
     entryPacket->DescriptorSize    = descriptorSize;
     entryPacket->DescriptorVersion = descriptorVersion;
 
+
     status = uefi_call_wrapper(BS->ExitBootServices, 2, ImageHandle, mapKey);
     if (EFI_ERROR(status)) {
         Print(L"ExitBootServices failed!\r\n");
         stall();
     }
 
-    __asm__ volatile("mov %0, %%cr3" : : "r"((uint64_t)pageTables) : "memory");
+    __asm__ volatile("mov %0, %%cr3" : : "r"((uint64_t)pageTables) : "memory"); // crashes here
+
     
     
-    // call kernel
-    void (*kernel_entry)(KernelEntryPacket*) = (void (*)(KernelEntryPacket*)) 0x0000000080100000;
+    // call kernel using sysv abi
+    void (*kernel_entry)(KernelEntryPacket*) __attribute__((sysv_abi)) = 
+    (void (*)(KernelEntryPacket*)) 0xFFFFFFFF80100000;
     kernel_entry(entryPacket);
+    
+    stall();
 
-
-    // while (1) __asm__ volatile("hlt");
 
     return EFI_SUCCESS;
 }

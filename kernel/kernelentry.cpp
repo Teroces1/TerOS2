@@ -17,9 +17,9 @@ volatile const uint16_t *BootSettings = (volatile uint16_t*) (0x1000);
 // the bootloader puts the info block array at 0x10000
 volatile const EntryTypes::VBEModeInfo *VBEInfos = (volatile EntryTypes::VBEModeInfo *) (0x10000);
 
-volatile uint8_t *frameBufferVirtual = (volatile uint8_t*) (0x800000); // where it is in virtual memory
+uint64_t initialFrameBufferStart = 0xFFFFFF8000000000ull; // where it is in virtual memory
 
-VBE::Display *primaryDisplay;
+VBE::Display *primaryDisplay = nullptr;
 
 const char* ExceptionMessages[32] = {
         "Divide by Zero",               // 0
@@ -50,6 +50,7 @@ const char* ExceptionMessages[32] = {
     };
 
 void CPU_EXCEPTION(INT::Registers *regs) {
+    if (primaryDisplay == nullptr) return;
     VBE::Display &display = *primaryDisplay;
 
     const VBE::Color back = display.GetRGB(0,0,255);
@@ -86,17 +87,35 @@ void CPU_EXCEPTION(INT::Registers *regs) {
 
 }
 
+struct __attribute__((packed)) testIDT {
+    uint16_t limit;
+    uint64_t base;
+};
 
 
+void CRASH() {
+    testIDT null_idt;
+    null_idt.limit = 0;
+    null_idt.base = 0;
+
+    // Load bad IDT and trigger software interrupt 0
+    __asm__ volatile (
+        "lidt %0\n\t"
+        "int3"
+        :
+        : "m"(null_idt)
+    );
+}
 
 
-extern "C" void kernel_main(const EntryTypes::EntryPacket* entryPacket, const EntryTypes::VBEInfoBlock* vbe_info) {
-    const volatile EntryTypes::VBEModeInfo &vbemode = VBEInfos[entryPacket->ModeIndexSelected];
+extern "C" void kernel_main(const EntryTypes::KernelEntryPacket *kernelEntryPacket) {
+    // CRASH();
+    const volatile EntryTypes::GopModeInfo &gopmode = kernelEntryPacket->ModeTablePtr[kernelEntryPacket->ModeSelected];
 
-    VBE::Display mainDisplay(vbemode, frameBufferVirtual);
+    VBE::Display mainDisplay(gopmode, reinterpret_cast<uint8_t *>(initialFrameBufferStart + (kernelEntryPacket->FrameBufferBase & 0x1FFFFFull)));
     primaryDisplay = &mainDisplay;
 
-    mainDisplay.ClearFront();
+    mainDisplay.ClearFront(VBE::BLACK);
 
     // if (Supports1GBPages()) {
     //     mainDisplay.ClearFront(mainDisplay.GetRGB(100, 205, 255));
@@ -106,7 +125,7 @@ extern "C" void kernel_main(const EntryTypes::EntryPacket* entryPacket, const En
 
     MEM::MemoryManager memMgr;
 
-    memMgr.InitializeUsableMemoryMap(entryPacket);
+    memMgr.InitializeUsableMemoryMap(kernelEntryPacket);
 
     mainDisplay.testPrint("max usable ram: ", memMgr.totalRAMSize, 10);
     mainDisplay.testPrint("hardware rsrvd: ", memMgr.hardwareUsedRAM, 10);
@@ -115,7 +134,7 @@ extern "C" void kernel_main(const EntryTypes::EntryPacket* entryPacket, const En
     mainDisplay.testPrint("init  used RAM: ", memMgr.GetOccupiedRamAmount() - memMgr.otherReservedRAM, 10);
     
 
-    memMgr.InitPaging(static_cast<uint64_t>(entryPacket->FrameBuffer), 0x400000);
+    memMgr.InitPaging(kernelEntryPacket->FrameBufferBase, kernelEntryPacket->FrameBufferSize);
     mainDisplay.SetFrameBuffer(reinterpret_cast<volatile uint8_t*>(MEM::frameBufferAddressSpace));
 
     mainDisplay.testPrint(" <   paging init   >");
@@ -196,6 +215,12 @@ extern "C" void kernel_main(const EntryTypes::EntryPacket* entryPacket, const En
     // int test2 = 0;
     // int test3 = test / test2;
 
+    uint64_t testbytes = memMgr.totalRAMSize / 0x10000;
+
+    
+    for (volatile uint64_t i = 0; i < 10000000000ull; i++) { __asm__ volatile("nop"); }
+
+
     int count = 0;
     mainDisplay.ClearFront();
     mainDisplay.testPrintLine = 0;
@@ -203,7 +228,7 @@ extern "C" void kernel_main(const EntryTypes::EntryPacket* entryPacket, const En
 
     // will allocate memory forever, and attempt to write to it. at some point, memory will run out, kmalloc will return nullptr, and writing to it will cause page fault
     while (1) {
-        uint8_t *ptr = reinterpret_cast<uint8_t*>(memMgr.kmalloc(2500));
+        uint8_t *ptr = reinterpret_cast<uint8_t*>(memMgr.kmalloc(testbytes));
         // if (count %50 == 0)
             mainDisplay.testPrint("heap  used RAM: ", memMgr.GetOccupiedRamAmount() - memMgr.otherReservedRAM, 10);
         if (count %2000 != 0)

@@ -10,20 +10,20 @@ using namespace VBE;
 //     ResX(resX), ResY(resY), BPP(bpp), BytesPerScanLine(bytesPerScanLine), FrameBuffer(frameBuffer), RPos(redPos), GPos(greenPos), BPos(bluePos)
 //     {}
 
-Display::Display(const volatile EntryTypes::VBEModeInfo &ModeInfo, volatile uint8_t *frameBufferVirtual) :
-    ResX(ModeInfo.x_resolution),
-    ResY(ModeInfo.y_resolution),
-    ColorEnabled((ModeInfo.mode_attributes & 0x08) != 0),
+Display::Display(const volatile EntryTypes::GopModeInfo &ModeInfo, volatile uint8_t *frameBufferVirtual) :
+    ResX(ModeInfo.HorizontalResolution),
+    ResY(ModeInfo.VerticalResolution),
+    // ColorEnabled((ModeInfo.mode_attributes & 0x08) != 0),
     FrameBuffer(frameBufferVirtual),
-    BytesPerScanLine(ModeInfo.bytes_per_scanline),
-    BPP(ModeInfo.bits_per_pixel),
+    // BytesPerScanLine(ModeInfo.bytes_per_scanline),
+    BPP(32),    // bpp is always 32 now
     // FrameBuffer(ModeInfo.physical_base_ptr),
-    RPos(ModeInfo.red_field_position),
-    GPos(ModeInfo.green_field_position),
-    BPos(ModeInfo.blue_field_position),
-    _totalBytes(ModeInfo.bytes_per_scanline * ModeInfo.y_resolution),
-    _totalAllPixels(_totalBytes / ((BPP+7) / 8)),
-    _pixelsPerScanLine(BytesPerScanLine / ((BPP+7) / 8))
+    RPos(16),
+    GPos(8),
+    BPos(0),
+    _totalBytes(ModeInfo.PixelsPerScanLine * ModeInfo.VerticalResolution * 4),
+    _totalAllPixels(ModeInfo.PixelsPerScanLine * ModeInfo.VerticalResolution),
+    _pixelsPerScanLine(ModeInfo.PixelsPerScanLine)
     {}
 
 void Display::SetFrameBuffer(volatile uint8_t *frameBufferVirtual) {

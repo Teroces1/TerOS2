@@ -15,7 +15,7 @@ namespace Kernel {
             uint32_t ACPI_Extended_Attributes;
         };
 
-        struct ModeInfo {
+        struct GopModeInfo {
             uint32_t HorizontalResolution;
             uint32_t VerticalResolution;
             uint32_t PixelFormat;
@@ -30,7 +30,7 @@ namespace Kernel {
 
             uint32_t NumModes;
             uint32_t ModeSelected;
-            ModeInfo *ModeTablePtr;
+            GopModeInfo *ModeTablePtr;
 
             uint64_t MemoryMapBase;
             uint64_t MemoryMapSize;

@@ -21,10 +21,9 @@ namespace VBE {
     public:
         const int ResX;
         const int ResY;
-        const bool ColorEnabled {true};
 
         // Display (int resX, int resY, int bpp, int bytesPerScanLine, uint8_t *frameBuffer, int redPos, int greenPos, int bluePos);
-        Display (const volatile EntryTypes::VBEModeInfo &ModeInfo, volatile uint8_t *frameBufferVirtual);
+        Display (const volatile EntryTypes::GopModeInfo &ModeInfo, volatile uint8_t *frameBufferVirtual);
         
         void SetFrameBuffer(volatile uint8_t *frameBufferVirtual);
 
@@ -82,7 +81,6 @@ namespace VBE {
         int testPrintLine = 5;
     private:
         volatile uint8_t *FrameBuffer;
-        const int BytesPerScanLine;
         const int BPP;
         const int RPos {0};
         const int GPos {0};

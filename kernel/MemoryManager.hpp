@@ -16,6 +16,34 @@ namespace MEM {
     constexpr uint64_t kernelVirtAddr = 0xFFFF'FFFF'8000'0000;
     constexpr uint64_t kernelPhysAddr = 0x000000;   // located at 0x100000, but page starting at 0
 
+    enum EFI_MEMORY_TYPE {
+        EfiReservedMemoryType,
+        EfiLoaderCode,
+        EfiLoaderData,
+        EfiBootServicesCode,
+        EfiBootServicesData,
+        EfiRuntimeServicesCode,
+        EfiRuntimeServicesData,
+        EfiConventionalMemory,
+        EfiUnusableMemory,
+        EfiACPIReclaimMemory,
+        EfiACPIMemoryNVS,
+        EfiMemoryMappedIO,
+        EfiMemoryMappedIOPortSpace,
+        EfiPalCode,
+        EfiPersistentMemory,
+        EfiMaxMemoryType
+    };
+
+    struct __attribute__((packed)) EFI_MEMORY_DESCRIPTOR {  // bruh these gummy hardcoded structs
+        uint32_t type;           // UEFI memory type
+        uint32_t padding;
+        uint64_t physicalStart;  // physical address of the block
+        uint64_t virtualStart;   // only used if SetVirtualAddressMap is called
+        uint64_t numberOfPages;  // size in 4KB pages
+        uint64_t attribute;      // capabilities of this memory (caching allowed, read-only, etc)
+    };
+
 
     struct HeapNode {   // should i use packed here? it would reduce the struct size to the minimum so might be useful
         HeapNode *prev; // need to store prev for grouping multiple free nodes, right?
@@ -44,7 +72,7 @@ namespace MEM {
             return *Instance;
         }
 
-        int InitializeUsableMemoryMap(const EntryTypes::EntryPacket *entryPacket);
+        int InitializeUsableMemoryMap(const EntryTypes::KernelEntryPacket *entryPacket);
 
         uint64_t GetOccupiedRamAmount();
 

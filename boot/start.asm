@@ -9,17 +9,28 @@
 [EXTERN _kernel_end]
 ; [EXTERN initial_stack_top]
 
+trigger_triple_fault:
+    lidt [null_idt]    ; Load the invalid IDT pointer
+    int3               ; Trigger an interrupt (causes #GP/#DF -> Triple Fault)
+    
+    .loop:
+        hlt
+        jmp .loop
+
+section .data
+align 8
+null_idt:
+    dw 0                ; IDT limit = 0
+    dq 0                ; IDT base  = 0
+
 section .start
 start:
     mov r14, rdi
 
-    mov rdi, 0x100000
-    add rdi, _kernel_load_size ; RDI = start of .bss at 1 MB mark
+    mov rdi, _kernel_load_end ; RDI = start of .bss at 1 MB mark
 
-    mov rax, _kernel_end
-    mov rbx, _kernel_load_end
-    sub rax, rbx
-    mov rcx, rax
+    mov rcx, _kernel_end
+    sub rcx, rdi
 
     add rcx, 3
     shr rcx, 2                 ; Convert to dwords
@@ -29,12 +40,11 @@ start:
 
     ; call c++ constructors
     mov rsp, kernel_stack_top
-    mov r12, qword __init_array_start
-    mov rax, [0xFF0302343]  ; should auto fault here
+    mov r12, __init_array_start
+    mov r13, __init_array_end
     
 
 .call_constructors:
-    mov r13, qword __init_array_end
     cmp r12, r13
     je .call_constructors_end
 

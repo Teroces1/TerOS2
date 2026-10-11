@@ -12,7 +12,7 @@ extern "C" {
     extern const char _kernel_end;
 }
 
-int MemoryManager::InitializeUsableMemoryMap(const EntryTypes::EntryPacket *entryPacket) {
+int MemoryManager::InitializeUsableMemoryMap(const EntryTypes::KernelEntryPacket *entryPacket) {
     uint64_t highestAddress = 0;
     uint64_t largestBlockStart = 0;
     uint64_t largestBlockSize = 0;
@@ -25,23 +25,23 @@ int MemoryManager::InitializeUsableMemoryMap(const EntryTypes::EntryPacket *entr
     otherReservedRAM = 0;
 
 
-    for (int i = 0; i < entryPacket->E820Count; i++) {
-        const EntryTypes::E820Entry &entry = entryPacket->E820Map[i];
+    for (uint64_t offset = 0; offset < entryPacket->MemoryMapSize; offset += entryPacket->DescriptorSize) {
+        const EFI_MEMORY_DESCRIPTOR &entry = *reinterpret_cast<EFI_MEMORY_DESCRIPTOR*>(entryPacket->MemoryMapBase + offset);
 
-        if (entry.Type == 1) {
-            uint64_t endAddr = entry.BaseAddress + entry.Length;
+        if (entry.type == EfiConventionalMemory || entry.type == EfiBootServicesCode || entry.type == EfiBootServicesData) {
+            uint64_t endAddr = entry.physicalStart + entry.numberOfPages*4096;
             if (endAddr > highestAddress) {
                 highestAddress = endAddr;
             }
 
-            if (entry.Length > largestBlockSize && entry.BaseAddress <= 0x200000) { // safety check to ensure low memory is used
-                largestBlockSize = entry.Length;
-                largestBlockStart = entry.BaseAddress;
+            if (entry.numberOfPages > largestBlockSize && entry.physicalStart <= 0x40000000) { // safety check to ensure first 1 gb of identity mapped space is used (mapped from bootloader)
+                largestBlockSize = entry.numberOfPages;
+                largestBlockStart = entry.physicalStart;
             }
 
-            totalRAMSize += (endAddr & ~4095) - ((entry.BaseAddress + 4095) & ~4095);
+            totalRAMSize += entry.numberOfPages * 4096;
         } else {
-            hardwareUsedRAM += entry.Length;
+            hardwareUsedRAM += entry.numberOfPages*4096;
         }
     }
     
@@ -73,15 +73,15 @@ int MemoryManager::InitializeUsableMemoryMap(const EntryTypes::EntryPacket *entr
     }
 
 
-    for (int i = 0; i < entryPacket->E820Count; i++) {
-        const EntryTypes::E820Entry &entry = entryPacket->E820Map[i];
+    for (uint64_t offset = 0; offset < entryPacket->MemoryMapSize; offset += entryPacket->DescriptorSize) {
+        const EFI_MEMORY_DESCRIPTOR &entry = *reinterpret_cast<EFI_MEMORY_DESCRIPTOR*>(entryPacket->MemoryMapBase + offset);
 
-        if (entry.Type == 1) {
-            uint64_t endAddr = (entry.BaseAddress + entry.Length) & ~0xFFF; // round down
+        if (entry.type == EfiConventionalMemory || entry.type == EfiBootServicesCode || entry.type == EfiBootServicesData) {
+            uint64_t endAddr = (entry.physicalStart + entry.numberOfPages*4096);
             
             // set to 0 for free
 
-            uint64_t currentAddr = (entry.BaseAddress + 4095) & ~0xFFF; // round up
+            uint64_t currentAddr = entry.physicalStart;
 
             while (currentAddr < endAddr) {
                 if ((currentAddr >= largestBlockStart && currentAddr < largestBlockStart+memoryMapLength) ||
@@ -101,10 +101,6 @@ int MemoryManager::InitializeUsableMemoryMap(const EntryTypes::EntryPacket *entr
                 usableMemoryMap[index] &= ~(1u << bit);
 
                 currentAddr += 4096;
-            }
-
-            if (endAddr >= highestAddress) {
-                break;
             }
         }
     }
